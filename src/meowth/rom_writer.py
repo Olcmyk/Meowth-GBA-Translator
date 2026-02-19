@@ -106,7 +106,8 @@ class RomWriter:
 
         for entry in entries:
             translated = entry.get("translated", "")
-            if not translated:
+            original = entry.get("original", "")
+            if not translated or translated == original:
                 stats["skipped"] += 1
                 continue
 
