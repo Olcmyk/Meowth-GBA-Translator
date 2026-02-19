@@ -1,0 +1,41 @@
+# Environment & secrets
+.env
+*.env.*
+
+# OS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+*.egg-info/
+dist/
+build/
+
+# .NET
+bin/
+obj/
+*.user
+*.suo
+
+# ROM files (large binaries)
+*.gba
+*.sav
+firered_cn.gba
+firered_cn.sav
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Outputs (keep directory, ignore contents)
+outputs/*
+!outputs/.gitkeep
+
+# HMA resources (copied from build output)
+resources/
+work/*
+!work/.gitkeep

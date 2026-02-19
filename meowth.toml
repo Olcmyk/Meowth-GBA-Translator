@@ -1,0 +1,16 @@
+[translation]
+provider = "deepseek"
+model = "deepseek-chat"
+source_language = "en"
+target_language = "zh-Hans"
+
+[translation.api]
+key_env = "DEEPSEEK_API_KEY"
+
+[font_patch]
+armips_path = "tools/armips"
+game = "FR"
+
+[output]
+dir = "outputs"
+cache_dir = "work/cache"
