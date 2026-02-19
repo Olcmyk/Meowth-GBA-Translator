@@ -21,7 +21,10 @@ class Charmap:
             hex_val = int(hex_part.strip(), 16)
 
             if not char_part:
-                char_part = " "  # 0x00 = space
+                if hex_val == 0x00:
+                    char_part = " "  # 0x00 = space per PCS spec
+                else:
+                    continue  # skip malformed entries
 
             if hex_val <= 0xFF:
                 self.char_to_bytes[char_part] = bytes([hex_val])

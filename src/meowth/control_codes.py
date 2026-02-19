@@ -1,45 +1,46 @@
 """PCS control code protection for translation."""
 
-import re
-
-# PCS control codes from HMA's pcsReference.txt
-# These must be preserved during translation
-CONTROL_CODES = [
-    # Multi-char codes (must match before single-char)
-    (r"\\v\w{2}", "variable"),       # \vXX - variable references
-    (r"\\pn", "pause_newline"),       # pause + newline
-    (r"\\pk", "pk_symbol"),           # Poké symbol part
-    (r"\\mn", "mn_symbol"),           # MON symbol part
-    (r"\\Bl", "scroll"),              # scroll text
-    (r"\\CC\w{2}", "color_code"),     # color codes
-    (r"\[player\]", "player_name"),
-    (r"\[rival\]", "rival_name"),
-    # Single-char codes
-    (r"\\n", "newline"),              # newline
-    (r"\\l", "line_scroll"),          # line scroll
-    (r"\\p", "paragraph"),            # paragraph break
-    (r"\\e", "escape"),               # escape
-]
-
-# Combined pattern
-_PATTERN = re.compile("|".join(f"({pat})" for pat, _ in CONTROL_CODES))
+from .pcs_codes import CONTROL_CODE_REGEX
 
 
 def protect(text: str) -> tuple[str, list[tuple[str, str]]]:
     """Replace control codes with numbered placeholders.
 
+    Handles both HMA backslash codes and actual newline chars.
+    HMA exports: \\n\\n = paragraph wait, single \\n = newline.
+
     Returns (protected_text, [(placeholder, original), ...])
     """
     codes: list[tuple[str, str]] = []
 
-    def replacer(m: re.Match) -> str:
-        original = m.group(0)
+    def make_placeholder(original: str) -> str:
         idx = len(codes)
         placeholder = f"{{C{idx}}}"
         codes.append((placeholder, original))
         return placeholder
 
-    protected = _PATTERN.sub(replacer, text)
+    # First pass: protect actual newlines (from HMA JSON export)
+    # \n\n = paragraph wait, single \n = newline
+    # Must do this BEFORE regex pass since regex won't match actual newlines
+    parts = []
+    i = 0
+    while i < len(text):
+        if text[i] == "\n" and i + 1 < len(text) and text[i + 1] == "\n":
+            parts.append(make_placeholder("\n\n"))
+            i += 2
+        elif text[i] == "\n":
+            parts.append(make_placeholder("\n"))
+            i += 1
+        else:
+            parts.append(text[i])
+            i += 1
+    text = "".join(parts)
+
+    # Second pass: protect HMA backslash control codes via regex
+    def replacer(m):
+        return make_placeholder(m.group(0))
+
+    protected = CONTROL_CODE_REGEX.sub(replacer, text)
     return protected, codes
 
 

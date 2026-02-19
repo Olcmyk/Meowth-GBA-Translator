@@ -80,11 +80,8 @@ class Translator:
         cache_key = self._cache_key(request_data)
         cached = self._get_cached(cache_key)
         if cached is not None:
-            results = [t.strip() for t in cached.split("|||")]
-            # Pad or truncate to match input length
-            while len(results) < len(texts):
-                results.append(texts[len(results)])  # fallback to original
-            return results[: len(texts)]
+            results = self._split_results(cached, len(texts), texts)
+            return results
 
         # Call DeepSeek API
         response = httpx.post(
@@ -109,7 +106,57 @@ class Translator:
 
         self._save_cache(cache_key, request_data, content)
 
-        results = [t.strip() for t in content.split("|||")]
-        while len(results) < len(texts):
-            results.append(texts[len(results)])
-        return results[: len(texts)]
+        return self._split_results(content, len(texts), texts)
+
+    @staticmethod
+    def _split_results(
+        content: str, expected: int, originals: list[str]
+    ) -> list[str]:
+        """Split LLM response by ||| and align with expected count.
+
+        If the LLM produced more segments than expected (e.g. a translation
+        contained |||), try to merge excess segments back together.
+        """
+        parts = [t.strip() for t in content.split("|||")]
+
+        if len(parts) == expected:
+            return parts
+
+        if len(parts) > expected:
+            # Too many splits — merge excess segments back.
+            # Strategy: greedily assign segments to each expected slot,
+            # merging adjacent segments when we have too many.
+            merged: list[str] = []
+            extra = len(parts) - expected
+            i = 0
+            for slot in range(expected):
+                merged.append(parts[i])
+                i += 1
+                # Distribute extra segments to earlier slots
+                if extra > 0 and slot < expected - 1:
+                    # Check if next part looks like a continuation
+                    # (doesn't start with a CJK char or capital letter)
+                    while extra > 0 and i < len(parts):
+                        next_part = parts[i]
+                        if next_part and (
+                            next_part[0].islower()
+                            or not next_part[0].isalpha()
+                        ):
+                            merged[-1] += "|||" + next_part
+                            i += 1
+                            extra -= 1
+                        else:
+                            break
+            # Append any remaining
+            while i < len(parts):
+                if len(merged) < expected:
+                    merged.append(parts[i])
+                else:
+                    merged[-1] += "|||" + parts[i]
+                i += 1
+            parts = merged
+
+        # Pad with originals if too few
+        while len(parts) < expected:
+            parts.append(originals[len(parts)])
+        return parts[:expected]

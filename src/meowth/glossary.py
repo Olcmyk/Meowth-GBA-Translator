@@ -24,6 +24,8 @@ TERM_FILES = {
 class Glossary:
     def __init__(self, pokeapi_dir: Path = POKEAPI_DIR):
         self.en_to_zh: dict[str, str] = {}
+        # Separate index for context matching: uppercase key → (original_en, zh)
+        self._upper_index: dict[str, tuple[str, str]] = {}
         self._load_all(pokeapi_dir)
 
     def _load_all(self, base_dir: Path):
@@ -52,20 +54,24 @@ class Glossary:
             en_name = names.get(LANG_EN, "")
             zh_name = names.get(LANG_ZH_HANS) or names.get(LANG_ZH_HANT, "")
             if en_name and zh_name:
-                # Store both original case and uppercase for matching
                 self.en_to_zh[en_name] = zh_name
                 self.en_to_zh[en_name.upper()] = zh_name
+                self._upper_index[en_name.upper()] = (en_name, zh_name)
 
     def lookup(self, english: str) -> str | None:
         """Look up Chinese translation for an English term."""
         return self.en_to_zh.get(english) or self.en_to_zh.get(english.upper())
 
     def get_context_terms(self, text: str, limit: int = 20) -> dict[str, str]:
-        """Find terms in text that have known translations (for LLM context)."""
-        found = {}
+        """Find terms in text that have known translations (for LLM context).
+
+        Uses the uppercase index for efficient case-insensitive matching.
+        Only checks each unique term once against the text.
+        """
+        found: dict[str, str] = {}
         text_upper = text.upper()
-        for en, zh in self.en_to_zh.items():
-            if en.upper() in text_upper:
+        for upper_key, (en, zh) in self._upper_index.items():
+            if upper_key in text_upper:
                 found[en] = zh
                 if len(found) >= limit:
                     break

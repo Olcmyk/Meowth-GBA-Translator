@@ -1,0 +1,11 @@
+[
+  {
+    "address": "0x1C582D",
+    "pointer_addresses": ["0x12EF4C"],
+    "original": "The various buttons will be explained in\\nthe order of their importance.",
+    "translated": "接下来将按重要程度\\n依次介绍各按键的功能。",
+    "is_pointer": true,
+    "max_bytes": 0,
+    "comment": "CONTROLS help screen - not extracted by HMA"
+  }
+]

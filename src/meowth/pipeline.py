@@ -8,6 +8,7 @@ from .charmap import Charmap
 from .control_codes import protect, restore
 from .font_patch import apply_font_patch
 from .glossary import Glossary
+from .pcs_scanner import scan_and_merge
 from .rom_writer import RomWriter
 from .translator import Translator
 
@@ -108,6 +109,72 @@ class Pipeline:
             return ""
         return "\n".join(f"  {en} = {zh}" for en, zh in terms.items())
 
+    @staticmethod
+    def _fix_paragraph_waits(entry: dict):
+        """Ensure translation preserves paragraph waits from original.
+
+        HMA exports: \\n\\n = paragraph wait (0xFB), single \\n = newline (0xFE).
+        If original has paragraph waits but translation lost them,
+        distribute them evenly through the translation.
+        """
+        orig = entry["original"]
+        trans = entry.get("translated", "")
+        if not trans or trans == orig:
+            return
+
+        # Count paragraph waits by splitting on \n\n (non-overlapping)
+        orig_paras = len(orig.split("\n\n")) - 1
+        trans_paras = len(trans.split("\n\n")) - 1
+
+        if orig_paras <= 0 or trans_paras >= orig_paras:
+            return
+
+        needed = orig_paras - trans_paras
+
+        # Split on \n\n first to preserve existing paragraph waits,
+        # then look for single \n within each paragraph to upgrade.
+        paragraphs = trans.split("\n\n")
+        # Collect (paragraph_idx, line_idx) for each single-\n join point
+        upgrade_candidates: list[tuple[int, int]] = []
+        for p_idx, para in enumerate(paragraphs):
+            lines = para.split("\n")
+            for l_idx in range(len(lines) - 1):
+                upgrade_candidates.append((p_idx, l_idx))
+
+        if upgrade_candidates:
+            # Pick evenly spaced positions to upgrade
+            step = len(upgrade_candidates) / (needed + 1)
+            upgrade_set: set[tuple[int, int]] = set()
+            for j in range(needed):
+                idx = min(int((j + 1) * step), len(upgrade_candidates) - 1)
+                upgrade_set.add(upgrade_candidates[idx])
+
+            # Rebuild each paragraph with upgrades applied
+            new_paragraphs = []
+            for p_idx, para in enumerate(paragraphs):
+                lines = para.split("\n")
+                parts = []
+                for l_idx, line in enumerate(lines):
+                    parts.append(line)
+                    if l_idx < len(lines) - 1:
+                        if (p_idx, l_idx) in upgrade_set:
+                            parts.append("\n\n")
+                        else:
+                            parts.append("\n")
+                new_paragraphs.append("".join(parts))
+            entry["translated"] = "\n\n".join(new_paragraphs)
+        else:
+            # No single newlines to upgrade — insert paragraph waits
+            # at evenly spaced character positions
+            total_len = len(trans)
+            step = total_len / (needed + 1)
+            insert_positions = sorted(
+                [int((j + 1) * step) for j in range(needed)], reverse=True
+            )
+            for pos in insert_positions:
+                trans = trans[:pos] + "\n\n" + trans[pos:]
+            entry["translated"] = trans
+
     def build_rom(
         self,
         original_rom: Path,
@@ -142,14 +209,24 @@ class Pipeline:
                     all_entries.append(entry)
         for entry in data["free_texts"]:
             if "translated" in entry:
+                self._fix_paragraph_waits(entry)
                 all_entries.append(entry)
+
+        # 3b. Load manual entries (texts not extracted by HMA)
+        manual_path = Path(__file__).parent / "manual_entries.json"
+        if manual_path.exists():
+            manual = json.loads(manual_path.read_text(encoding="utf-8"))
+            all_entries.extend(manual)
+            print(f"  Added {len(manual)} manual entries")
 
         # 4. Inject texts
         print(f"  Injecting {len(all_entries)} translated texts...")
         rom, stats = writer.inject_texts(rom, all_entries)
         print(
             f"  Done: {stats['in_place']} in-place, "
-            f"{stats['relocated']} relocated, {stats['skipped']} skipped"
+            f"{stats['relocated']} relocated, {stats['skipped']} skipped, "
+            f"{stats.get('skipped_partial_ptrs', 0)} partial-ptr skipped, "
+            f"{stats.get('unsafe_ptrs', 0)} unsafe ptrs filtered"
         )
 
         # 5. Save
@@ -170,11 +247,14 @@ class Pipeline:
         translated_path = work_dir / "texts_translated.json"
         output_path = output_dir / f"firered_cn_{timestamp}.gba"
 
-        print(f"[1/3] Translating texts...")
+        print("[1/4] PCS scan — finding texts HMA missed...")
+        scan_and_merge(rom_path, texts_path)
+
+        print("[2/4] Translating texts...")
         self.translate_texts(texts_path, translated_path)
 
-        print(f"[2/3] Building ROM...")
+        print("[3/4] Building ROM...")
         self.build_rom(rom_path, translated_path, output_path)
 
-        print(f"[3/3] Complete: {output_path}")
+        print(f"[4/4] Complete: {output_path}")
         return output_path
