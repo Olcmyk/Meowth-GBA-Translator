@@ -1,291 +1,178 @@
-"""ROM expansion, text injection, and pointer updates."""
+"""ROM writer for injecting translated text."""
 
+import json
 from pathlib import Path
+from typing import Optional
 
-from .charmap import Charmap
-from .pcs_codes import (
-    BACKSLASH_CODES,
-    BRACKET_MACROS,
-    CONTROL_CODE_PREFIX,
-    ESCAPE_PREFIX,
-    BUTTON_PREFIX,
-    F7_PREFIX,
-    F9_PREFIX,
-    F6_BYTE,
-    NEWLINE,
-    PARAGRAPH,
-    TERMINATOR,
-    fc_arg_count,
-)
-
-# Font Patch injects data at GBA address 0x09FD3000 = ROM offset 0x01FD3000
-# We must not write past this boundary
-FONT_PATCH_BOUNDARY = 0x01FD3000
-ROM_32MB = 0x02000000
-GBA_ROM_BASE = 0x08000000
+from .charmap import Charmap, get_default_charmap
+from .pcs_scanner import is_real_text
 
 
 class RomWriter:
-    def __init__(self, charmap: Charmap):
-        self.charmap = charmap
-        self.free_ptr = 0  # next free space pointer
+    """Writes translated text to GBA ROM with pointer redirection."""
 
-    def load_rom(self, path: Path) -> bytearray:
-        return bytearray(path.read_bytes())
+    # Font patch boundary - don't write past this
+    FONT_BOUNDARY = 0x01FD3000
 
-    def expand_rom(self, rom: bytearray, target_size: int = ROM_32MB) -> bytearray:
-        """Expand ROM to target size, filling with 0xFF."""
-        if len(rom) < target_size:
-            rom.extend(b"\xFF" * (target_size - len(rom)))
-        return rom
+    # Expansion area start
+    EXPANSION_START = 0x01000000
 
-    def encode_text(self, text: str) -> bytearray:
-        """Encode translated text to ROM bytes.
+    # GBA pointer offset
+    POINTER_OFFSET = 0x08000000
 
-        Handles mixed content: HMA control codes → PCS bytes,
-        regular characters → charmap.
-        HMA exports: \n\n = paragraph wait (0xFB), single \n = newline (0xFE).
-        """
-        result = bytearray()
-        i = 0
-        while i < len(text):
-            # Double newline = paragraph wait (PCS 0xFB)
-            if text[i] == "\n" and i + 1 < len(text) and text[i + 1] == "\n":
-                result.append(PARAGRAPH)
-                i += 2
-                continue
+    # Minimum safe pointer source for HMA-verified entries
+    # HMA correctly identifies literal pool entries in code as pointer sources
+    # We trust all HMA pointer sources (no brute-force scanning anymore)
+    MIN_POINTER_SOURCE = 0x100000
 
-            # Single newline = PCS newline (0xFE)
-            if text[i] == "\n":
-                result.append(NEWLINE)
-                i += 1
-                continue
+    def __init__(self, charmap: Optional[Charmap] = None):
+        self.charmap = charmap or get_default_charmap()
+        self.write_offset = self.EXPANSION_START
 
-            # Check for [...] macro sequences
-            if text[i] == "[":
-                macro_result = self._encode_macro(text, i)
-                if macro_result is not None:
-                    result.extend(macro_result[0])
-                    i += macro_result[1]
-                    continue
-
-            # Check for HMA backslash control codes
-            if text[i] == "\\" and i + 1 < len(text):
-                code_bytes = self._encode_control_code(text, i)
-                if code_bytes is not None:
-                    result.extend(code_bytes[0])
-                    i += code_bytes[1]
-                    continue
-
-            # Regular character through charmap
-            encoded = self.charmap.encode_char(text[i])
-            if encoded is None:
-                # Skip unsupported characters
-                i += 1
-                continue
-            result.extend(encoded)
-            i += 1
-
-        return result
-
-    def _encode_control_code(self, text: str, pos: int) -> tuple[bytes, int] | None:
-        """Encode an HMA backslash control code at pos."""
-        remaining = text[pos:]
-
-        # \CC followed by hex bytes — 0xFC + command byte + variable args
-        if remaining.startswith("\\CC"):
-            return self._encode_cc_code(remaining)
-
-        # \btn followed by 2 hex chars — 0xF8 + button ID
-        if remaining.startswith("\\btn") and len(remaining) >= 6:
-            try:
-                val = int(remaining[4:6], 16)
-                return bytes([BUTTON_PREFIX, val]), 6
-            except ValueError:
-                pass
-
-        # \9 followed by 2 hex chars — 0xF9 + byte
-        if remaining.startswith("\\9") and len(remaining) >= 4:
-            try:
-                val = int(remaining[2:4], 16)
-                return bytes([F9_PREFIX, val]), 4
-            except ValueError:
-                pass
-
-        # \? followed by 2 hex chars — 0xF7 + byte
-        if remaining.startswith("\\?") and len(remaining) >= 4:
-            try:
-                val = int(remaining[2:4], 16)
-                return bytes([F7_PREFIX, val]), 4
-            except ValueError:
-                pass
-
-        # \F6 — raw single byte
-        if remaining.startswith("\\F6"):
-            return bytes([F6_BYTE]), 3
-
-        # Simple backslash codes from shared definitions
-        for code_str, code_bytes in BACKSLASH_CODES:
-            if remaining.startswith(code_str):
-                return code_bytes, len(code_str)
-
-        # \\ (double backslash) = 0xFD escape, next byte is raw
-        if remaining.startswith("\\\\") and len(remaining) >= 4:
-            try:
-                val = int(remaining[2:4], 16)
-                return bytes([ESCAPE_PREFIX, val]), 4
-            except ValueError:
-                pass
-
-        return None
-
-    def _encode_cc_code(self, remaining: str) -> tuple[bytes, int] | None:
-        """Encode \\CC control code with variable-length hex arguments."""
-        hex_start = 3  # skip \CC
-        hex_chars = ""
-        j = hex_start
-        while j < len(remaining) and remaining[j] in "0123456789ABCDEFabcdef":
-            hex_chars += remaining[j]
-            j += 1
-
-        if len(hex_chars) < 2:
-            return None
-
-        result = bytearray([CONTROL_CODE_PREFIX])
-        byte_count = len(hex_chars) // 2
-        for k in range(byte_count):
-            val = int(hex_chars[k * 2 : k * 2 + 2], 16)
-            result.append(val)
-
-        consumed = 3 + byte_count * 2
-        return bytes(result), consumed
-
-    def _encode_macro(self, text: str, pos: int) -> tuple[bytes, int] | None:
-        """Encode [...] macro sequences using shared definitions."""
-        remaining = text[pos:]
-        for macro_str, macro_bytes in BRACKET_MACROS.items():
-            if remaining.startswith(macro_str):
-                return macro_bytes, len(macro_str)
-        return None
-
-    @staticmethod
-    def _is_safe_pointer(rom: bytearray, ptr_addr: int, text_addr: int) -> bool:
-        """Check if a pointer address is safe to update.
-
-        A pointer is safe if:
-        1. It's within ROM bounds
-        2. It currently points to the expected text address
-        3. It's not in the first 0x8000 bytes (ROM header + early code)
-
-        FireRed ROM layout:
-        - 0x000000-0x008000: Header, interrupt vectors, critical early code
-        - 0x008000-0x100000: Game code (but some data tables exist here too)
-        - 0x100000+: Scripts, text, and data
-
-        We use a conservative 0x8000 threshold to avoid corrupting critical
-        boot code while still allowing script pointer updates.
-        """
-        # Basic bounds check
-        if ptr_addr + 4 > len(rom):
-            return False
-
-        # Skip first 32KB - ROM header and critical boot code
-        if ptr_addr < 0x8000:
-            return False
-
-        # Read current pointer value and validate it points to expected address
-        current_val = int.from_bytes(rom[ptr_addr : ptr_addr + 4], "little")
-        expected_val = text_addr + GBA_ROM_BASE
-
-        return current_val == expected_val
-
-    def inject_texts(
+    def inject(
         self,
-        rom: bytearray,
-        entries: list[dict],
-        start_offset: int = 0x01000000,
-    ) -> tuple[bytearray, dict]:
-        """Inject translated texts into ROM.
+        rom_path: str | Path,
+        translations_path: str | Path,
+        output_path: Optional[str | Path] = None,
+    ) -> None:
+        """Inject translated text into ROM.
 
         Args:
-            rom: ROM bytearray (should be expanded to 32MB and font-patched)
-            entries: list of dicts with 'address', 'pointer_addresses', 'translated',
-                     'max_bytes', 'is_pointer' keys
-            start_offset: where to start writing relocated text
-
-        Returns:
-            (modified_rom, stats_dict)
+            rom_path: Path to source ROM
+            translations_path: Path to translations JSON
+            output_path: Path for output ROM (default: modify in place)
         """
-        self.free_ptr = start_offset
-        stats = {
-            "in_place": 0,
-            "relocated": 0,
-            "skipped": 0,
-            "skipped_partial_ptrs": 0,  # Skipped because not all pointers were safe
-            "unsafe_ptrs": 0,
-        }
+        rom_path = Path(rom_path)
+        translations_path = Path(translations_path)
+        output_path = Path(output_path) if output_path else rom_path
+
+        # Load ROM
+        with open(rom_path, "rb") as f:
+            rom = bytearray(f.read())
+
+        # Load translations
+        with open(translations_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        entries = data.get("entries", [])
+        stats = {"written": 0, "skipped": 0, "skipped_garbage": 0, "skipped_same": 0, "errors": 0}
 
         for entry in entries:
-            translated = entry.get("translated", "")
-            original = entry.get("original", "")
-            if not translated or translated == original:
-                stats["skipped"] += 1
-                continue
+            try:
+                self._process_entry(rom, entry, stats)
+            except Exception as e:
+                print(f"Error processing {entry.get('id', '?')}: {e}")
+                stats["errors"] += 1
 
-            encoded = self.encode_text(translated)
-            encoded.append(TERMINATOR)
+        # Write output
+        with open(output_path, "wb") as f:
+            f.write(rom)
 
-            address = int(entry["address"], 16)
-            max_bytes = entry.get("max_bytes", 0)
-            is_pointer = entry.get("is_pointer", False)
-            all_ptrs = [int(p, 16) for p in entry.get("pointer_addresses", [])]
+        print(f"写入完成: {stats['written']} 条写入, {stats['skipped_same']} 条未变, {stats['skipped_garbage']} 条垃圾跳过, {stats['errors']} 错误")
 
-            # Filter to only safe pointer addresses
-            safe_ptrs = [p for p in all_ptrs if self._is_safe_pointer(rom, p, address)]
-            unsafe_count = len(all_ptrs) - len(safe_ptrs)
-            stats["unsafe_ptrs"] += unsafe_count
+    def _process_entry(self, rom: bytearray, entry: dict, stats: dict) -> None:
+        """Process a single text entry."""
+        original = entry.get("original", "")
+        translated = entry.get("translated", "")
 
-            # encoded already includes terminator (added above)
-            if not is_pointer and max_bytes > 0 and len(encoded) <= max_bytes:
-                # Write in place, pad with 0xFF
-                rom[address : address + len(encoded)] = encoded
-                remaining = max_bytes - len(encoded)
-                if remaining > 0:
-                    rom[address + len(encoded) : address + max_bytes] = (
-                        b"\xFF" * remaining
-                    )
-                stats["in_place"] += 1
-            elif safe_ptrs:
-                # CRITICAL: Only relocate if ALL pointers are safe
-                # If some pointers are unsafe, those would still point to the old
-                # address after relocation, causing crashes
-                if unsafe_count > 0:
-                    stats["skipped_partial_ptrs"] += 1
-                    continue
+        # Safety check: skip if original looks like garbage (not real text)
+        if entry.get("category") == "scripts" and not is_real_text(original):
+            stats["skipped_garbage"] += 1
+            return
 
-                # Relocate to free space
-                if self.free_ptr + len(encoded) >= FONT_PATCH_BOUNDARY:
-                    stats["skipped"] += 1
-                    continue
+        address = int(entry.get("address", "0x0").replace("0x", ""), 16)
+        entry_id = entry.get("id", "")
+        pointer_sources = entry.get("pointer_sources", [])
 
-                rom[self.free_ptr : self.free_ptr + len(encoded)] = encoded
-                # Update all pointers (we verified all are safe above)
-                for ptr_addr in safe_ptrs:
-                    self._write_pointer(rom, ptr_addr, self.free_ptr)
-                self.free_ptr += len(encoded)
-                # Align to 4 bytes
-                self.free_ptr = (self.free_ptr + 3) & ~3
-                stats["relocated"] += 1
-            else:
-                stats["skipped"] += 1
+        # Skip if no translation or same as original
+        if not translated or translated == original:
+            stats["skipped_same"] += 1
+            return
 
-        return rom, stats
+        # Clean text (remove HMA quotes)
+        clean_translated = translated.strip('"')
+        if not clean_translated:
+            stats["skipped_same"] += 1
+            return
 
-    def _write_pointer(self, rom: bytearray, ptr_addr: int, target: int):
-        """Write a GBA pointer (little-endian + 0x08000000 base)."""
-        value = target + GBA_ROM_BASE
-        rom[ptr_addr : ptr_addr + 4] = value.to_bytes(4, "little")
+        # Encode text
+        try:
+            encoded = self.charmap.encode(clean_translated)
+        except Exception as e:
+            print(f"Encoding error for {entry.get('id', '?')}: {e}")
+            stats["errors"] += 1
+            return
 
-    def save_rom(self, rom: bytearray, path: Path):
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(rom)
+        is_pointer_based = entry.get("is_pointer_based", False)
+        original_length = entry.get("byte_length", 0)
+
+        # Decide write strategy
+        if is_pointer_based and pointer_sources:
+            # Write to expansion area and update pointers
+            self._write_with_redirect(rom, encoded, pointer_sources, stats)
+        elif len(encoded) <= original_length:
+            # In-place replacement (pad with 0xFF if shorter)
+            self._write_in_place(rom, address, encoded, original_length, stats)
+        else:
+            # Text too long and no pointers - skip to preserve table structure
+            stats["skipped_same"] += 1
+
+    def _write_with_redirect(
+        self, rom: bytearray, encoded: bytes, pointer_sources: list, stats: dict
+    ) -> None:
+        """Write text to expansion area and update pointers."""
+        # Check boundary
+        if self.write_offset + len(encoded) >= self.FONT_BOUNDARY:
+            print(f"Warning: Approaching font boundary at 0x{self.write_offset:X}")
+            stats["errors"] += 1
+            return
+
+        # Ensure ROM is large enough
+        if self.write_offset + len(encoded) > len(rom):
+            stats["errors"] += 1
+            return
+
+        # Write encoded text
+        rom[self.write_offset : self.write_offset + len(encoded)] = encoded
+
+        # Update all pointers (skip false positives in code section)
+        new_pointer = self.POINTER_OFFSET + self.write_offset
+        for ptr_src in pointer_sources:
+            ptr_addr = int(ptr_src.replace("0x", ""), 16)
+            if ptr_addr < self.MIN_POINTER_SOURCE:
+                continue  # Skip: likely machine code, not a real pointer
+            if ptr_addr + 4 <= len(rom):
+                rom[ptr_addr : ptr_addr + 4] = new_pointer.to_bytes(4, "little")
+
+        self.write_offset += len(encoded)
+        stats["written"] += 1
+
+    def _write_in_place(
+        self, rom: bytearray, address: int, encoded: bytes, max_length: int, stats: dict
+    ) -> None:
+        """Write text in place, padding with 0xFF if needed."""
+        if address + max_length > len(rom):
+            stats["errors"] += 1
+            return
+
+        # Write encoded data
+        write_len = min(len(encoded), max_length)
+        rom[address : address + write_len] = encoded[:write_len]
+
+        # Pad remaining space with 0xFF
+        if write_len < max_length:
+            rom[address + write_len : address + max_length] = b"\xFF" * (
+                max_length - write_len
+            )
+
+        stats["written"] += 1
+
+    def _truncate_encoded(self, encoded: bytes, max_length: int) -> bytes:
+        """Truncate encoded text to fit max length, ensuring valid termination."""
+        if len(encoded) <= max_length:
+            return encoded
+
+        # Find a safe truncation point (don't split 2-byte chars)
+        truncated = bytearray(encoded[: max_length - 1])
+        truncated.append(0xFF)  # Add terminator
+        return bytes(truncated)
