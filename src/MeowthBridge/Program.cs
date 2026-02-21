@@ -1,7 +1,4 @@
-using System.Text.Json;
-using HavenSoft.HexManiac.Core;
 using HavenSoft.HexManiac.Core.Models;
-using HavenSoft.HexManiac.Core.Models.Runs;
 
 namespace MeowthBridge;
 
@@ -33,14 +30,13 @@ public static class Program
         Console.Error.WriteLine($"ROM loaded. Game code: {RomLoader.GetGameCode(model)}");
 
         Console.Error.WriteLine("Extracting text...");
-        var result = TextExtractor.Extract(model);
+        var extractor = new TextExtractor(model);
+        var entries = extractor.ExtractAll();
 
-        var options = new JsonSerializerOptions { WriteIndented = true };
-        var json = JsonSerializer.Serialize(result, options);
+        var json = extractor.ToJson(entries);
         File.WriteAllText(outputPath, json);
 
-        Console.Error.WriteLine($"Extracted {result.Tables.Sum(t => t.Entries.Count)} table entries");
-        Console.Error.WriteLine($"Extracted {result.FreeTexts.Count} free text entries");
+        Console.Error.WriteLine($"Extracted {entries.Count} entries");
         Console.Error.WriteLine($"Written to: {outputPath}");
         return 0;
     }

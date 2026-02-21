@@ -251,6 +251,12 @@ public class TextExtractor
 
     /// <summary>
     /// 验证地址处是否为有效 PCS 文本，返回长度（含 0xFF 终止符），无效返回 0
+    /// 覆盖完整 Gen3 PCS 字符集：
+    ///   0x00=空格, 0x01-0x50=扩展字符, 0x51-0xA0=扩展字符,
+    ///   0xA1-0xAA=数字, 0xAB-0xBA=标点, 0xBB-0xD4=A-Z, 0xD5-0xEE=a-z,
+    ///   0xEF=♂, 0xF0=♀, 0xF1-0xF9=特殊字符/控制码,
+    ///   0xFA=换行, 0xFB=换段, 0xFC/0xFD=带参控制码, 0xFE=换行
+    /// 同时通过字母比例（≥20%）过滤碰巧命中 0xFF 的二进制数据
     /// </summary>
     private int ValidatePcsText(int address)
     {
@@ -258,6 +264,7 @@ public class TextExtractor
 
         const int MAX_LENGTH = 2000;
         int letters = 0;
+        int totalPrintable = 0;
 
         for (int i = 0; i < MAX_LENGTH && address + i < _model.Count; i++)
         {
@@ -265,29 +272,38 @@ public class TextExtractor
 
             if (b == 0xFF) // 终止符
             {
-                // 至少要有一些字母才算有效文本
                 if (letters < 2) return 0;
+                // 字母比例检查：过滤伪装成文本的二进制数据
+                if (totalPrintable > 0 && (double)letters / totalPrintable < 0.20) return 0;
                 return i + 1;
             }
 
-            // 有效 PCS 字符
-            if (b == 0x00 || b == 0x1B ||                          // 空格, é
-                (b >= 0xA1 && b <= 0xAA) ||                        // 数字
-                (b >= 0xAB && b <= 0xB9) ||                        // 标点
-                (b >= 0xBB && b <= 0xD4) ||                        // A-Z
-                (b >= 0xD5 && b <= 0xEE) ||                        // a-z
-                b == 0xFA || b == 0xFB || b == 0xFE)               // 换行控制码
+            // A-Z, a-z, é — 计入字母
+            if ((b >= 0xBB && b <= 0xD4) || (b >= 0xD5 && b <= 0xEE) || b == 0x1B)
             {
-                if ((b >= 0xBB && b <= 0xD4) || (b >= 0xD5 && b <= 0xEE) || b == 0x1B)
-                    letters++;
+                letters++;
+                totalPrintable++;
                 continue;
             }
 
-            // 控制码 FC/FD - 跳过参数
+            // 空格、数字、标点（含冒号 0xBA）
+            if (b == 0x00 || (b >= 0xA1 && b <= 0xBA))
+            {
+                totalPrintable++;
+                continue;
+            }
+
+            // 换行/换段控制码
+            if (b == 0xFA || b == 0xFB || b == 0xFE)
+            {
+                totalPrintable++;
+                continue;
+            }
+
+            // 带参数的控制码 FC/FD — 跳过参数字节
             if (b == 0xFC && address + i + 1 < _model.Count)
             {
-                i++; // 跳过至少一个参数字节
-                // FC 控制码可能有更多参数，但简单跳过一个足够做验证
+                i++;
                 continue;
             }
             if (b == 0xFD && address + i + 1 < _model.Count)
@@ -296,11 +312,14 @@ public class TextExtractor
                 continue;
             }
 
-            // 扩展 PCS 字符（重音字母等）
-            if ((b >= 0x01 && b <= 0x35) || (b >= 0x51 && b <= 0x9A))
+            // 扩展 PCS 字符：0x01-0x50（重音字母等）、0x51-0xA0、0xEF-0xF9（♂♀及特殊符号）
+            if ((b >= 0x01 && b <= 0x50) || (b >= 0x51 && b <= 0xA0) || (b >= 0xEF && b <= 0xF9))
+            {
+                totalPrintable++;
                 continue;
+            }
 
-            // 无效字符 - 不是 PCS 文本
+            // 不在任何合法 PCS 范围内 — 不是文本
             return 0;
         }
 
