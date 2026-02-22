@@ -15,12 +15,24 @@ def is_real_text(text: str) -> bool:
     """
     if not text or len(text) < 2:
         return False
+    # Strip control code representations before checking — their hex digits
+    # inflate the ASCII-letter ratio and let garbage slip through.
+    clean = re.sub(r'\\CC[0-9A-Fa-f]+', '', text)
+    clean = re.sub(r'\\btn[0-9A-Fa-f]{2}', '', clean)
+    clean = re.sub(r'\\\?[0-9A-Fa-f]{2}', '', clean)
+    clean = re.sub(r'\\[0-9A-Fa-f]{2}', '', clean)
+    clean = re.sub(r'\\[pnlre.+<>]', '', clean)
+    clean = re.sub(r'\\(pk|mn|Po|Ke|Bl|Lo|Ck|Lv|qo|qc|sm|sf|au|ad|al|ar|pn)', '', clean)
+    clean = re.sub(r'\[.*?\]', '', clean)
+    clean = re.sub(r'\\![0-9A-Fa-f]+', '', clean)
+    if not clean or len(clean) < 2:
+        return False
     # Must have at least one ASCII letter (not just accented chars like î ê)
-    if not any(c.isascii() and c.isalpha() for c in text):
+    if not any(c.isascii() and c.isalpha() for c in clean):
         return False
     # Must have reasonable ASCII letter ratio
-    ascii_letters = sum(1 for c in text if c.isascii() and c.isalpha())
-    if len(text) > 0 and ascii_letters / len(text) < 0.3:
+    ascii_letters = sum(1 for c in clean if c.isascii() and c.isalpha())
+    if len(clean) > 0 and ascii_letters / len(clean) < 0.3:
         return False
     return True
 

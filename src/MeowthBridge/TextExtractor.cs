@@ -26,22 +26,24 @@ public class TextExtractor
         ExtractTableTexts(entries, extractedAddresses, ref id);
         Console.Error.WriteLine($"  表格文本: {entries.Count} 条");
 
-        // Phase 2: 完全信任 HMA 的 PCSRun —— 精确提取所有文本
-        // HMA 在模型初始化时已经通过指针分析验证了每个 PCSRun
-        // 不再需要暴力扫描（那是导致游戏崩溃的根源）
-        Console.Error.WriteLine("Phase 2: 提取 HMA 识别的所有文本...");
-        int beforeScript = entries.Count;
-        ExtractHmaTexts(entries, extractedAddresses, ref id);
-        Console.Error.WriteLine($"  HMA 文本: {entries.Count - beforeScript} 条");
+        // Phase 2: 扫描 loadpointer 指令，构建安全的指针源映射
+        // 只信任脚本中明确的 loadpointer (0x0F) 指令作为指针源
+        // 不使用 HMA 的 SearchForPointers（全 ROM 扫描会误判跳转表等为指针）
+        Console.Error.WriteLine("Phase 2: 扫描 loadpointer 指令...");
+        var loadpointerMap = ScanLoadpointerSources();
+        Console.Error.WriteLine($"  发现 {loadpointerMap.Count} 个文本地址的 loadpointer 引用");
 
-        // Phase 3: 扫描 loadpointer 指令中的文本指针
-        // HMA 的 SearchForPointers 只扫描 4 字节对齐的指针
-        // 但 XSE 脚本的 loadpointer (0x0F) 指令中的指针不一定对齐
-        // 直接扫描整个脚本数据区找 loadpointer 操作码
-        Console.Error.WriteLine("Phase 3: 扫描 loadpointer 指令...");
+        // Phase 3: 提取 HMA 识别的文本，仅使用 loadpointer 验证的指针源
+        Console.Error.WriteLine("Phase 3: 提取 HMA 识别的文本...");
+        int beforeHma = entries.Count;
+        ExtractHmaTextsWithSafePointers(entries, extractedAddresses, ref id, loadpointerMap);
+        Console.Error.WriteLine($"  HMA 文本: {entries.Count - beforeHma} 条");
+
+        // Phase 4: 补充 loadpointer 发现但 HMA 未识别的文本
+        Console.Error.WriteLine("Phase 4: 补充 loadpointer 文本...");
         int beforeLp = entries.Count;
-        ExtractLoadpointerTexts(entries, extractedAddresses, ref id);
-        Console.Error.WriteLine($"  loadpointer 文本: {entries.Count - beforeLp} 条");
+        ExtractRemainingLoadpointerTexts(entries, extractedAddresses, ref id, loadpointerMap);
+        Console.Error.WriteLine($"  loadpointer 补充: {entries.Count - beforeLp} 条");
 
         return entries;
     }
@@ -124,22 +126,59 @@ public class TextExtractor
     }
 
     /// <summary>
-    /// Phase 2: 完全信任 HMA 的 PCSRun 识别结果
-    /// HMA 在模型初始化时通过 SearchForPointers + WriteStringRuns 精确识别了所有文本
-    /// 每个 PCSRun 都有可靠的 PointerSources（包括代码区的 literal pool 条目）
+    /// 扫描 loadpointer (0x0F) 指令，构建 文本地址 → 指针源地址集合 的映射。
+    /// 这是唯一安全的指针源发现方式：只信任脚本中明确的 loadpointer 指令，
+    /// 不依赖 HMA 的 SearchForPointers（全 ROM 4 字节对齐扫描，会误判跳转表）。
     /// </summary>
-    private void ExtractHmaTexts(List<TextEntry> entries, HashSet<int> extractedAddresses, ref int id)
+    private Dictionary<int, HashSet<int>> ScanLoadpointerSources()
     {
-        int withPointers = 0, noPointers = 0, tooShort = 0;
+        var map = new Dictionary<int, HashSet<int>>();
+
+        for (int i = 0x0A0000; i < _model.Count - 6; i++)
+        {
+            if (_model[i] != 0x0F) continue; // loadpointer opcode
+
+            int ptrOffset = i + 2;
+            if (ptrOffset + 4 > _model.Count) continue;
+
+            var pointer = _model.ReadPointer(ptrOffset);
+            if (pointer < 0 || pointer >= _model.Count) continue;
+
+            var textLength = ValidatePcsText(pointer);
+            if (textLength < 2) continue;
+
+            if (!map.ContainsKey(pointer))
+                map[pointer] = new HashSet<int>();
+            map[pointer].Add(ptrOffset);
+
+            i += 5; // opcode(1) + bank(1) + pointer(4) - 1 (loop will i++)
+        }
+
+        return map;
+    }
+
+    /// <summary>
+    /// Phase 3: 提取 HMA 识别的 PCSRun 文本，但指针源仅使用 loadpointer 验证的结果。
+    /// HMA 的 PCSRun 文本发现是可靠的，但其 PointerSources 来自全 ROM 扫描，
+    /// 会把跳转表、函数指针表等误判为文本指针 —— 写入时会破坏代码导致崩溃。
+    /// </summary>
+    private void ExtractHmaTextsWithSafePointers(
+        List<TextEntry> entries, HashSet<int> extractedAddresses, ref int id,
+        Dictionary<int, HashSet<int>> loadpointerMap)
+    {
+        int withLpPtrs = 0, inPlaceOnly = 0, noRefs = 0, tooShort = 0;
 
         foreach (var run in _model.All<PCSRun>())
         {
             if (extractedAddresses.Contains(run.Start)) continue;
 
-            var pointerSources = run.PointerSources?.ToList() ?? new List<int>();
-            if (pointerSources.Count == 0)
+            var hmaPointers = run.PointerSources?.ToList() ?? new List<int>();
+            bool hasLoadpointer = loadpointerMap.ContainsKey(run.Start);
+
+            // 既无 HMA 指针也无 loadpointer 引用 → 跳过
+            if (hmaPointers.Count == 0 && !hasLoadpointer)
             {
-                noPointers++;
+                noRefs++;
                 continue;
             }
 
@@ -153,63 +192,43 @@ public class TextExtractor
                 continue;
             }
             extractedAddresses.Add(run.Start);
-            withPointers++;
+
+            // 仅使用 loadpointer 验证的安全指针源
+            var safePointers = hasLoadpointer
+                ? loadpointerMap[run.Start].Select(p => $"0x{p:X}").ToList()
+                : new List<string>();
+
+            if (hasLoadpointer) withLpPtrs++;
+            else inPlaceOnly++;
 
             entries.Add(new TextEntry
             {
                 Id = $"scr_{id++:D5}",
                 Category = "scripts",
                 Address = $"0x{run.Start:X}",
-                PointerSources = pointerSources.Select(p => $"0x{p:X}").ToList(),
+                PointerSources = safePointers,
                 Original = text,
                 ByteLength = run.Length,
-                IsPointerBased = true
+                IsPointerBased = hasLoadpointer
             });
         }
 
-        Console.Error.WriteLine($"  有指针: {withPointers}, 无指针跳过: {noPointers}, 太短跳过: {tooShort}");
+        Console.Error.WriteLine(
+            $"  有loadpointer指针: {withLpPtrs}, 仅就地写入: {inPlaceOnly}, " +
+            $"无引用跳过: {noRefs}, 太短跳过: {tooShort}");
     }
 
     /// <summary>
-    /// Phase 3: 扫描 loadpointer (0x0F) 指令提取 HMA 遗漏的文本
-    /// loadpointer 格式: 0F <bank> <4字节指针>
-    /// 指针在 opcode+2 处，不一定 4 字节对齐，所以 HMA 的对齐扫描会漏掉
-    /// 这是安全的：只收集明确的脚本指令中的指针，不会碰到代码区 literal pool
+    /// Phase 4: 补充 loadpointer 发现但 HMA 未识别的文本
+    /// 这些文本没有对应的 PCSRun（HMA 未识别），但有明确的 loadpointer 引用
     /// </summary>
-    private void ExtractLoadpointerTexts(List<TextEntry> entries, HashSet<int> extractedAddresses, ref int id)
+    private void ExtractRemainingLoadpointerTexts(
+        List<TextEntry> entries, HashSet<int> extractedAddresses, ref int id,
+        Dictionary<int, HashSet<int>> loadpointerMap)
     {
         int found = 0;
-        // 文本地址 -> 所有指向它的 loadpointer 指针源
-        var textToPointers = new Dictionary<int, HashSet<int>>();
 
-        // 扫描脚本数据区
-        // FRLG ARM 代码区约 0x000000-0x0A0000，之后是数据和脚本
-        // loadpointer 主要集中在 0x0C0000-0x1C0000 区域
-        for (int i = 0x0A0000; i < _model.Count - 6; i++)
-        {
-            if (_model[i] != 0x0F) continue; // loadpointer opcode
-
-            // 读取指针（在 opcode+2 处）
-            int ptrOffset = i + 2;
-            if (ptrOffset + 4 > _model.Count) continue;
-
-            var pointer = _model.ReadPointer(ptrOffset);
-            if (pointer < 0 || pointer >= _model.Count) continue;
-
-            // 验证目标是有效 PCS 文本
-            var textLength = ValidatePcsText(pointer);
-            if (textLength < 2) continue;
-
-            if (!textToPointers.ContainsKey(pointer))
-                textToPointers[pointer] = new HashSet<int>();
-            textToPointers[pointer].Add(ptrOffset);
-
-            // 跳过已处理的指针字节
-            i += 5; // opcode(1) + bank(1) + pointer(4) - 1 (loop will i++)
-        }
-
-        // 为每个新发现的文本创建条目
-        foreach (var (textAddr, ptrSources) in textToPointers)
+        foreach (var (textAddr, ptrSources) in loadpointerMap)
         {
             if (extractedAddresses.Contains(textAddr)) continue;
 
@@ -224,21 +243,13 @@ public class TextExtractor
 
             extractedAddresses.Add(textAddr);
 
-            // 合并 HMA 已知的指针源
-            var allPointers = new HashSet<int>(ptrSources);
-            var run = _model.GetNextRun(textAddr);
-            if (run is PCSRun pcsRun && run.Start == textAddr && pcsRun.PointerSources != null)
-            {
-                foreach (var ps in pcsRun.PointerSources)
-                    allPointers.Add(ps);
-            }
-
+            // 仅使用 loadpointer 发现的安全指针源，不合并 HMA 的 PointerSources
             entries.Add(new TextEntry
             {
                 Id = $"scr_{id++:D5}",
                 Category = "scripts",
                 Address = $"0x{textAddr:X}",
-                PointerSources = allPointers.Select(p => $"0x{p:X}").ToList(),
+                PointerSources = ptrSources.Select(p => $"0x{p:X}").ToList(),
                 Original = text,
                 ByteLength = textLength,
                 IsPointerBased = true
