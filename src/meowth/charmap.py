@@ -71,3 +71,106 @@ class Charmap:
             else:
                 length += 1  # assume 1 byte for unknown
         return length
+
+    def encode(self, text: str) -> bytes:
+        """Encode text to ROM bytes using pcs_codes for control codes + charmap for chars.
+
+        This is a convenience alias that delegates to encode_string but also
+        handles backslash codes and bracket macros from pcs_codes.
+        """
+        from .pcs_codes import BACKSLASH_CODES, BRACKET_MACROS
+
+        # Pre-clean: strip stray curly braces around newlines from LLM output
+        # e.g. {\n\n} -> \n\n, {\n} -> \n
+        text = text.replace("{\n\n}", "\n\n")
+        text = text.replace("{\n}", "\n")
+
+        result = bytearray()
+        i = 0
+        while i < len(text):
+            # Handle real newline characters (0x0A) from JSON
+            if text[i] == "\n":
+                if i + 1 < len(text) and text[i + 1] == "\n":
+                    # \n\n = paragraph wait (0xFB)
+                    result.append(0xFB)
+                    i += 2
+                else:
+                    # single \n = newline (0xFE)
+                    result.append(0xFE)
+                    i += 1
+                continue
+
+            # Skip carriage returns
+            if text[i] == "\r":
+                i += 1
+                continue
+
+            # Try bracket macros: [player], [rival], [red], etc.
+            if text[i] == "[":
+                end = text.find("]", i)
+                if end != -1:
+                    token = text[i : end + 1]
+                    if token in BRACKET_MACROS:
+                        result.extend(BRACKET_MACROS[token])
+                        i = end + 1
+                        continue
+
+            # Try backslash codes (longest first)
+            matched = False
+            if text[i] == "\\":
+                for code_str, code_bytes in BACKSLASH_CODES:
+                    if text[i:].startswith(code_str):
+                        result.extend(code_bytes)
+                        i += len(code_str)
+                        matched = True
+                        break
+                # \\CC hex codes: \CCXXYY... -> FC XX YY ...
+                if not matched and text[i:].startswith("\\CC"):
+                    j = i + 3
+                    hex_chars = []
+                    while j < len(text) and j - (i + 3) < 20:
+                        pair = text[j : j + 2]
+                        if len(pair) == 2 and all(c in "0123456789ABCDEFabcdef" for c in pair):
+                            hex_chars.append(int(pair, 16))
+                            j += 2
+                        else:
+                            break
+                    if hex_chars:
+                        result.append(0xFC)
+                        result.extend(hex_chars)
+                        i = j
+                        matched = True
+                # \\btn hex codes: \btnXX -> F8 XX
+                if not matched and text[i:].startswith("\\btn"):
+                    pair = text[i + 4 : i + 6]
+                    if len(pair) == 2 and all(c in "0123456789ABCDEFabcdef" for c in pair):
+                        result.append(0xF8)
+                        result.append(int(pair, 16))
+                        i += 6
+                        matched = True
+            if matched:
+                continue
+
+            # Try raw byte placeholder {XX}
+            if text[i] == "{" and i + 3 < len(text) and text[i + 3] == "}":
+                hex_str = text[i + 1 : i + 3]
+                if all(c in "0123456789ABCDEFabcdef" for c in hex_str):
+                    result.append(int(hex_str, 16))
+                    i += 4
+                    continue
+
+            # Regular character via charmap
+            enc = self.encode_char(text[i])
+            if enc is not None:
+                result.extend(enc)
+            else:
+                raise ValueError(f"Character '{text[i]}' (U+{ord(text[i]):04X}) not in charmap")
+            i += 1
+
+        result.append(0xFF)  # PCS terminator
+        return bytes(result)
+
+
+def get_default_charmap() -> Charmap:
+    """Return a Charmap instance with the default font patch charmap."""
+    return Charmap()
