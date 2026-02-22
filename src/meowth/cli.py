@@ -29,6 +29,15 @@ def main():
 
 
 @main.command()
+@click.argument("rom_path", type=click.Path(exists=True))
+@click.option("-o", "--output", default="work/texts.json", help="Output texts JSON path")
+def extract(rom_path, output):
+    """Extract texts from ROM using MeowthBridge."""
+    Pipeline.extract_texts(Path(rom_path), Path(output))
+    click.echo(f"Extracted: {output}")
+
+
+@main.command()
 @click.argument("texts_json", type=click.Path(exists=True))
 @click.option("-o", "--output", default="work/texts_translated.json")
 @click.option("--batch-size", default=30, help="Texts per LLM batch")
@@ -54,7 +63,7 @@ def build(rom_path, translations, output):
 @click.option("-o", "--output-dir", default="outputs")
 @click.option("--work-dir", default="work")
 def full(rom_path, output_dir, work_dir):
-    """Run full pipeline: translate + build ROM."""
+    """Run full pipeline: extract → translate → build ROM."""
     pipeline = Pipeline()
     pipeline.run_full(Path(rom_path), Path(output_dir), Path(work_dir))
 
