@@ -3,20 +3,34 @@
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 
 import httpx
 
 DEFAULT_CACHE_DIR = Path(__file__).parent.parent.parent / "work" / "cache"
 
-SYSTEM_PROMPT = """你是一个专业的宝可梦游戏翻译器，负责将GBA宝可梦火红的英文文本翻译成简体中文。
+SYSTEM_PROMPT = """你是一个专业的宝可梦游戏本地化翻译专家。请将以下宝可梦游戏的英文文本翻译成简体中文。
 
-翻译规则：
-1. 保持宝可梦游戏的语气和风格（轻松、冒险、友好）
-2. 控制码占位符（如 {C0}, {C1} 等）必须原样保留，不要翻译或修改
-3. 翻译要简洁，中文文本不要比英文长太多（GBA文本框宽度有限）
-4. 每行最多约21个中文字符
-5. 专有名词请参考提供的术语表
+核心规则：
+1. 控制码占位符（如 {{C0}}, {{C1}} 等）必须原样保留，不得修改、删除或增加
+   - 这些是游戏的控制码（换行、翻页、颜色等），改动会导致游戏崩溃
+2. 占位符的数量和顺序必须与原文完全一致
+3. 使用宝可梦官方简体中文译名（皮卡丘、小火龙、妙蛙种子等）
+4. POKéMON / Pokémon 翻译为"宝可梦"
+5. 保持游戏对话的自然口语风格
+6. 人名地名等专有名词如果有官方译名则使用官方译名，否则音译
+7. 只返回翻译结果，不要任何解释或注释
+8. 如果输入文本中没有任何可翻译的内容（纯符号或乱码），请原封不动地返回原文
+9. 翻译时不需要考虑换行，系统会自动排版
+10. 保留所有 \\. 等待标记的位置，它们表示游戏中的停顿效果
+11. 保留段落分隔（空行），它们表示游戏中的翻页
+
+重要：占位符代表游戏运行时会替换的变量（如玩家名、劲敌名等），翻译时不要用人名替代周围的 rival 等词。
+- "rival" 一词翻译为"劲敌"，不要翻译为具体人名（如小茂）
+- 例如 "your rival {{C0}}" 应翻译为 "你的劲敌{{C0}}"，而不是 "小茂{{C0}}"
+
+重要：你必须将所有英文内容翻译成中文。不要原样返回英文文本。即使是地名、专有名词也要翻译或音译。
 
 术语表：
 {glossary}"""
@@ -104,9 +118,37 @@ class Translator:
         response.raise_for_status()
         content = response.json()["choices"][0]["message"]["content"]
 
-        self._save_cache(cache_key, request_data, content)
+        # Only cache if the result actually contains translations
+        results = self._split_results(content, len(texts), texts)
+        has_untranslated = any(
+            self._translation_unchanged(orig, trans)
+            for orig, trans in zip(texts, results)
+        )
+        if not has_untranslated:
+            self._save_cache(cache_key, request_data, content)
+        else:
+            print(f"  [部分未翻译，不缓存此批次]")
 
-        return self._split_results(content, len(texts), texts)
+        return results
+
+    @staticmethod
+    def _translation_unchanged(original: str, translated: str) -> bool:
+        """Check if the API returned text essentially unchanged (not translated)."""
+        orig_norm = original.strip().lower()
+        trans_norm = translated.strip().lower()
+
+        if orig_norm == trans_norm:
+            return True
+
+        # Check if the translated text still has mostly ASCII letters
+        # (meaning it wasn't really translated to Chinese)
+        ascii_letters = sum(1 for c in translated if c.isascii() and c.isalpha())
+        chinese_chars = sum(1 for c in translated if "\u4e00" <= c <= "\u9fff")
+        total = ascii_letters + chinese_chars
+        if total > 0 and ascii_letters / total > 0.8:
+            return True
+
+        return False
 
     @staticmethod
     def _split_results(

@@ -62,6 +62,19 @@ class Glossary:
         """Look up Chinese translation for an English term."""
         return self.en_to_zh.get(english) or self.en_to_zh.get(english.upper())
 
+    def apply_to_text(self, text: str) -> str:
+        """Apply glossary replacements to text using word-boundary matching."""
+        import re
+
+        result = text
+        # Sort by length (longest first) to avoid partial replacements
+        for en, zh in sorted(self.en_to_zh.items(), key=lambda x: -len(x[0])):
+            # Use word boundaries to avoid matching substrings inside other words
+            # e.g. "Dig" should not match inside "Indigo"
+            pattern = re.compile(r"(?<![A-Za-z])" + re.escape(en) + r"(?![A-Za-z])")
+            result = pattern.sub(zh, result)
+        return result
+
     def get_context_terms(self, text: str, limit: int = 20) -> dict[str, str]:
         """Find terms in text that have known translations (for LLM context).
 
