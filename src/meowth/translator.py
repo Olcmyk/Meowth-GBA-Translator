@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 import re
+import threading
 from pathlib import Path
 
 import httpx
@@ -54,28 +55,31 @@ class Translator:
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.base_url = "https://api.deepseek.com/v1"
+        self._cache_lock = threading.Lock()
 
     def _cache_key(self, request_data: dict) -> str:
         content = json.dumps(request_data, sort_keys=True, ensure_ascii=False)
         return hashlib.sha256(content.encode()).hexdigest()[:16]
 
     def _get_cached(self, key: str) -> str | None:
-        resp_path = self.cache_dir / f"{key}_response.json"
-        if resp_path.exists():
-            data = json.loads(resp_path.read_text(encoding="utf-8"))
-            return data.get("content")
-        return None
+        with self._cache_lock:
+            resp_path = self.cache_dir / f"{key}_response.json"
+            if resp_path.exists():
+                data = json.loads(resp_path.read_text(encoding="utf-8"))
+                return data.get("content")
+            return None
 
     def _save_cache(self, key: str, request_data: dict, content: str):
-        req_path = self.cache_dir / f"{key}_request.json"
-        resp_path = self.cache_dir / f"{key}_response.json"
-        req_path.write_text(
-            json.dumps(request_data, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
-        resp_path.write_text(
-            json.dumps({"content": content}, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
+        with self._cache_lock:
+            req_path = self.cache_dir / f"{key}_request.json"
+            resp_path = self.cache_dir / f"{key}_response.json"
+            req_path.write_text(
+                json.dumps(request_data, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+            resp_path.write_text(
+                json.dumps({"content": content}, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
 
     def translate_batch(
         self, texts: list[str], glossary_context: str = ""

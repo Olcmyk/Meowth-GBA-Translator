@@ -39,3 +39,9 @@ outputs/*
 resources/
 work/*
 !work/.gitkeep
+
+# External repos / build artifacts
+HexManiacAdvance/
+Pokemon_GBA_Font_Patch/
+armips-build/
+.serena/

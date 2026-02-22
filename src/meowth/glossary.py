@@ -26,7 +26,21 @@ class Glossary:
         self.en_to_zh: dict[str, str] = {}
         # Separate index for context matching: uppercase key → (original_en, zh)
         self._upper_index: dict[str, tuple[str, str]] = {}
-        self._load_all(pokeapi_dir)
+        # Try loading from pre-built JSON first, fall back to CSV
+        json_path = Path(__file__).parent.parent.parent / "resources" / "glossary.json"
+        if json_path.exists():
+            self._load_json(json_path)
+        else:
+            self._load_all(pokeapi_dir)
+
+    def _load_json(self, path: Path):
+        """Load glossary from pre-built JSON file."""
+        import json
+        data = json.loads(path.read_text(encoding="utf-8"))
+        self.en_to_zh = data.get("en_to_zh", {})
+        # Build uppercase index
+        for en, zh in self.en_to_zh.items():
+            self._upper_index[en.upper()] = (en, zh)
 
     def _load_all(self, base_dir: Path):
         for category, (filename, id_col) in TERM_FILES.items():

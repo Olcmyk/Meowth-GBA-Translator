@@ -27,12 +27,12 @@ def _visible_length(line: str) -> int:
 
 
 def _classify_newlines(text: str) -> str:
-    """Replace newlines with semantic paragraph breaks or spaces.
+    """Replace newlines with semantic breaks or spaces.
 
-    Rules:
-    - \\n\\n → always a semantic paragraph break (keep as \\n\\n)
+    Three-level classification:
+    - \\n\\n → paragraph break (page break in GBA, keep as \\n\\n)
     - \\n where the preceding line is short (< 75% of GBA line width)
-      → semantic break (keep as \\n\\n)
+      → semantic newline (same text box, keep as \\n)
     - \\n where the preceding line is long (filled the text box)
       → layout wrap (replace with space)
     """
@@ -44,11 +44,13 @@ def _classify_newlines(text: str) -> str:
     for i, line in enumerate(lines):
         result_parts.append(line)
         if i < len(lines) - 1:
-            vis_len = _visible_length(line)
+            # Strip PARA markers before measuring visible length
+            clean_line = line.replace(_PARA, "")
+            vis_len = _visible_length(clean_line)
             if vis_len < _SEMANTIC_THRESHOLD:
-                result_parts.append("\n\n")
+                result_parts.append("\n")   # semantic newline (within box)
             else:
-                result_parts.append(" ")
+                result_parts.append(" ")    # layout wrap (remove)
 
     result = "".join(result_parts)
     result = result.replace(_PARA, "\n\n")
@@ -59,10 +61,10 @@ def protect(text: str) -> tuple[str, list[tuple[str, str]]]:
     """Replace control codes with numbered placeholders.
 
     Handles both HMA backslash codes and actual newline chars.
-    Intelligently classifies literal newlines:
-    - \\n\\n = always semantic paragraph break
-    - short line + \\n = semantic break (line didn't fill text box)
-    - long line + \\n = layout wrap (join with space)
+    Intelligently classifies literal newlines (three levels):
+    - \\n\\n = paragraph break (page break / clear box)
+    - short line + \\n = semantic newline (new line within same box)
+    - long line + \\n = layout wrap (join with space, remove)
 
     Returns (protected_text, [(placeholder, original), ...])
     """

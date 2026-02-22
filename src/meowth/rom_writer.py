@@ -152,8 +152,9 @@ class RomWriter:
             if len(encoded) <= actual_text_len:
                 self._write_in_place(rom, address, encoded, original_length, stats)
             else:
-                # Text too long for the actual text slot - skip
-                stats["skipped_same"] += 1
+                # Truncate to fit the original text slot
+                truncated = self._truncate_encoded(encoded, actual_text_len)
+                self._write_in_place(rom, address, truncated, original_length, stats)
         else:
             stats["skipped_same"] += 1
 
@@ -264,13 +265,36 @@ class RomWriter:
             )
 
     def _truncate_encoded(self, encoded: bytes, max_length: int) -> bytes:
-        """Truncate encoded text to fit max length, ensuring valid termination."""
+        """Truncate encoded text to fit max length, ensuring valid termination.
+
+        Avoids splitting 2-byte CJK characters (high byte >= 0x80 in font patch).
+        """
         if len(encoded) <= max_length:
             return encoded
 
-        # Find a safe truncation point (don't split 2-byte chars)
-        truncated = bytearray(encoded[: max_length - 1])
-        truncated.append(0xFF)  # Add terminator
+        # Walk through encoded bytes respecting multi-byte boundaries
+        i = 0
+        while i < max_length - 1:  # leave room for 0xFF terminator
+            b = encoded[i]
+            if b == 0xFF:
+                break
+            # 2-byte CJK char: high byte in font patch range
+            if b >= 0x80 and b not in (0xFA, 0xFB, 0xFC, 0xFD, 0xFE, 0xFF):
+                if i + 2 > max_length - 1:
+                    break  # not enough room for this char + terminator
+                i += 2
+            elif b == 0xFC:
+                # FC control code: FC + cmd + args, skip all
+                i += 2  # at minimum FC + 1 byte
+                if i < len(encoded) and encoded[i-1] in (0x01, 0x04, 0x06):
+                    i += 1  # extra arg byte
+            elif b == 0xFD:
+                i += 2  # FD + 1 byte
+            else:
+                i += 1
+
+        truncated = bytearray(encoded[:i])
+        truncated.append(0xFF)
         return bytes(truncated)
 
     # ------------------------------------------------------------------
@@ -368,6 +392,8 @@ class RomWriter:
                 self._write_in_place_v2(rom, address, encoded, original_length)
                 stats["in_place"] += 1
             else:
-                stats["skipped"] += 1
+                truncated = self._truncate_encoded(encoded, actual_text_len)
+                self._write_in_place_v2(rom, address, truncated, original_length)
+                stats["in_place"] += 1
         else:
             stats["skipped"] += 1

@@ -72,6 +72,48 @@ class Charmap:
                 length += 1  # assume 1 byte for unknown
         return length
 
+    # Fullwidth → halfwidth mapping for characters the LLM likes to produce
+    _FULLWIDTH_MAP = str.maketrans(
+        "０１２３４５６７８９"
+        "ＡＢＣＤＥＦＧＨＩＪＫＬＭＮＯＰＱＲＳＴＵＶＷＸＹＺ"
+        "ａｂｃｄｅｆｇｈｉｊｋｌｍｎｏｐｑｒｓｔｕｖｗｘｙｚ"
+        "（）～",
+        "0123456789"
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        "abcdefghijklmnopqrstuvwxyz"
+        "()~",
+    )
+
+    # Characters to replace with charmap-safe alternatives
+    _CHAR_REPLACEMENTS = {
+        "\u2014": "-",    # em dash → hyphen
+        "\u2013": "-",    # en dash → hyphen
+        "\u2018": "'",    # left single quote
+        "\u2019": "'",    # right single quote
+        "\u201C": "\"",   # left double quote (will be skipped if not in charmap)
+        "\u201D": "\"",   # right double quote
+        "\u300A": "\"",   # 《 → "
+        "\u300B": "\"",   # 》 → "
+        "\u3001": ",",    # 、 → ,
+        "\uFF5E": "~",    # ～ fullwidth tilde
+        "\u00B7": ".",    # middle dot
+        "$": "",          # dollar sign (not in charmap, strip)
+    }
+
+    def _sanitize(self, text: str) -> str:
+        """Normalize characters that aren't in the charmap to safe alternatives."""
+        # Fullwidth → halfwidth
+        text = text.translate(self._FULLWIDTH_MAP)
+        # Character replacements
+        for old, new in self._CHAR_REPLACEMENTS.items():
+            if old in text:
+                text = text.replace(old, new)
+        # Strip any remaining stray curly braces (not part of {XX} hex patterns)
+        import re
+        text = re.sub(r"\{(?![0-9A-Fa-f]{2}\})", "", text)
+        text = re.sub(r"(?<!\{[0-9A-Fa-f]{2})\}", "", text)
+        return text
+
     def encode(self, text: str) -> bytes:
         """Encode text to ROM bytes using pcs_codes for control codes + charmap for chars.
 
@@ -80,10 +122,14 @@ class Charmap:
         """
         from .pcs_codes import BACKSLASH_CODES, BRACKET_MACROS
 
-        # Pre-clean: strip stray curly braces around newlines from LLM output
-        # e.g. {\n\n} -> \n\n, {\n} -> \n
-        text = text.replace("{\n\n}", "\n\n")
-        text = text.replace("{\n}", "\n")
+        # Pre-clean: strip stray curly braces around control codes from LLM output
+        import re
+        text = re.sub(r"\{(\\[pnlr.]|\n\n?)\}", r"\1", text)
+        # Also strip {\\?XX}, {\\CCXXXX} etc.
+        text = re.sub(r"\{(\\(?:\?[0-9A-Fa-f]{2}|CC[0-9A-Fa-f]{4}|btn[0-9A-Fa-f]{2}|B[0-9A-Fa-f]))\}", r"\1", text)
+
+        # Sanitize unsupported characters
+        text = self._sanitize(text)
 
         result = bytearray()
         i = 0
@@ -164,7 +210,9 @@ class Charmap:
             if enc is not None:
                 result.extend(enc)
             else:
-                raise ValueError(f"Character '{text[i]}' (U+{ord(text[i]):04X}) not in charmap")
+                # Skip unsupported characters instead of crashing
+                # (rare kanji, stray symbols, etc.)
+                pass
             i += 1
 
         result.append(0xFF)  # PCS terminator

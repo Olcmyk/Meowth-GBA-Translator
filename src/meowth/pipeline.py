@@ -2,6 +2,7 @@
 
 import json
 import subprocess
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
 
@@ -10,6 +11,7 @@ from .control_codes import protect, restore
 from .font_patch import apply_font_patch
 from .glossary import Glossary
 from .rom_writer import RomWriter
+from .text_wrap import wrap_text
 from .translator import Translator
 
 # ---------------------------------------------------------------------------
@@ -95,25 +97,42 @@ class Pipeline:
         self.translator = translator or Translator()
 
     def translate_texts(
-        self, texts_path: Path, output_path: Path, batch_size: int = 30
+        self, texts_path: Path, output_path: Path, batch_size: int = 30,
+        max_workers: int = 10,
     ) -> Path:
-        """Translate extracted texts JSON."""
+        """Translate extracted texts JSON with parallel workers."""
         data = json.loads(texts_path.read_text(encoding="utf-8"))
         data = convert_format(data)
 
-        # Translate table entries
+        # Translate table entries (fast, glossary-based)
         for table in data["tables"]:
             self._translate_table(table)
 
-        # Translate free texts in batches
+        # Translate free texts in parallel batches
         free_texts = data["free_texts"]
-        for i in range(0, len(free_texts), batch_size):
-            batch = free_texts[i : i + batch_size]
+        batches = [
+            free_texts[i : i + batch_size]
+            for i in range(0, len(free_texts), batch_size)
+        ]
+        total = len(batches)
+        print(f"  共 {total} 批次，使用 {max_workers} 线程并行翻译")
+
+        done_count = 0
+
+        def process_batch(idx_batch):
+            idx, batch = idx_batch
             self._translate_free_batch(batch)
-            print(
-                f"  Translated free text batch {i // batch_size + 1}"
-                f"/{(len(free_texts) + batch_size - 1) // batch_size}"
-            )
+            return idx
+
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {
+                executor.submit(process_batch, (i, b)): i
+                for i, b in enumerate(batches)
+            }
+            for future in as_completed(futures):
+                done_count += 1
+                idx = future.result()
+                print(f"  [{done_count}/{total}] 批次 {idx + 1} 完成")
 
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(
@@ -181,82 +200,16 @@ class Pipeline:
         # Translate
         results = self.translator.translate_batch(protected_list, glossary_ctx)
 
-        # Restore control codes
+        # Restore control codes and wrap text
         for i, entry in enumerate(remaining):
             translated = restore(results[i], codes_list[i])
-            entry["translated"] = translated
+            entry["translated"] = wrap_text(translated)
 
     def _format_glossary(self, text: str) -> str:
         terms = self.glossary.get_context_terms(text)
         if not terms:
             return ""
         return "\n".join(f"  {en} = {zh}" for en, zh in terms.items())
-
-    @staticmethod
-    def _fix_paragraph_waits(entry: dict):
-        """Ensure translation preserves paragraph waits from original.
-
-        HMA exports: \\n\\n = paragraph wait (0xFB), single \\n = newline (0xFE).
-        If original has paragraph waits but translation lost them,
-        distribute them evenly through the translation.
-        """
-        orig = entry["original"]
-        trans = entry.get("translated", "")
-        if not trans or trans == orig:
-            return
-
-        # Count paragraph waits by splitting on \n\n (non-overlapping)
-        orig_paras = len(orig.split("\n\n")) - 1
-        trans_paras = len(trans.split("\n\n")) - 1
-
-        if orig_paras <= 0 or trans_paras >= orig_paras:
-            return
-
-        needed = orig_paras - trans_paras
-
-        # Split on \n\n first to preserve existing paragraph waits,
-        # then look for single \n within each paragraph to upgrade.
-        paragraphs = trans.split("\n\n")
-        # Collect (paragraph_idx, line_idx) for each single-\n join point
-        upgrade_candidates: list[tuple[int, int]] = []
-        for p_idx, para in enumerate(paragraphs):
-            lines = para.split("\n")
-            for l_idx in range(len(lines) - 1):
-                upgrade_candidates.append((p_idx, l_idx))
-
-        if upgrade_candidates:
-            # Pick evenly spaced positions to upgrade
-            step = len(upgrade_candidates) / (needed + 1)
-            upgrade_set: set[tuple[int, int]] = set()
-            for j in range(needed):
-                idx = min(int((j + 1) * step), len(upgrade_candidates) - 1)
-                upgrade_set.add(upgrade_candidates[idx])
-
-            # Rebuild each paragraph with upgrades applied
-            new_paragraphs = []
-            for p_idx, para in enumerate(paragraphs):
-                lines = para.split("\n")
-                parts = []
-                for l_idx, line in enumerate(lines):
-                    parts.append(line)
-                    if l_idx < len(lines) - 1:
-                        if (p_idx, l_idx) in upgrade_set:
-                            parts.append("\n\n")
-                        else:
-                            parts.append("\n")
-                new_paragraphs.append("".join(parts))
-            entry["translated"] = "\n\n".join(new_paragraphs)
-        else:
-            # No single newlines to upgrade — insert paragraph waits
-            # at evenly spaced character positions
-            total_len = len(trans)
-            step = total_len / (needed + 1)
-            insert_positions = sorted(
-                [int((j + 1) * step) for j in range(needed)], reverse=True
-            )
-            for pos in insert_positions:
-                trans = trans[:pos] + "\n\n" + trans[pos:]
-            entry["translated"] = trans
 
     def build_rom(
         self,
@@ -293,7 +246,6 @@ class Pipeline:
                     all_entries.append(entry)
         for entry in data["free_texts"]:
             if "translated" in entry:
-                self._fix_paragraph_waits(entry)
                 all_entries.append(entry)
 
         # 3b. Load manual entries (texts not extracted by HMA)

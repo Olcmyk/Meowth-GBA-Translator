@@ -41,10 +41,11 @@ def extract(rom_path, output):
 @click.argument("texts_json", type=click.Path(exists=True))
 @click.option("-o", "--output", default="work/texts_translated.json")
 @click.option("--batch-size", default=30, help="Texts per LLM batch")
-def translate(texts_json, output, batch_size):
+@click.option("--workers", default=10, help="Parallel translation threads")
+def translate(texts_json, output, batch_size, workers):
     """Translate extracted texts JSON via DeepSeek."""
     pipeline = Pipeline()
-    pipeline.translate_texts(Path(texts_json), Path(output), batch_size)
+    pipeline.translate_texts(Path(texts_json), Path(output), batch_size, workers)
     click.echo(f"Translated: {output}")
 
 
