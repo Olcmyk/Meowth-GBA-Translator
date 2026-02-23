@@ -26,6 +26,9 @@ class Glossary:
         self.en_to_zh: dict[str, str] = {}
         # Separate index for context matching: uppercase key → (original_en, zh)
         self._upper_index: dict[str, tuple[str, str]] = {}
+        # Compact key index: uppercase with spaces/hyphens stripped
+        # Handles GBA's 13-char move names like THUNDERPUNCH → Thunder Punch
+        self._compact_index: dict[str, str] = {}
         # Try loading from pre-built JSON first, fall back to CSV
         json_path = Path(__file__).parent.parent.parent / "resources" / "glossary.json"
         if json_path.exists():
@@ -38,9 +41,11 @@ class Glossary:
         import json
         data = json.loads(path.read_text(encoding="utf-8"))
         self.en_to_zh = data.get("en_to_zh", {})
-        # Build uppercase index
+        # Build uppercase index and compact index
         for en, zh in self.en_to_zh.items():
             self._upper_index[en.upper()] = (en, zh)
+            compact = en.upper().replace(" ", "").replace("-", "")
+            self._compact_index[compact] = zh
 
     def _load_all(self, base_dir: Path):
         for category, (filename, id_col) in TERM_FILES.items():
@@ -71,10 +76,20 @@ class Glossary:
                 self.en_to_zh[en_name] = zh_name
                 self.en_to_zh[en_name.upper()] = zh_name
                 self._upper_index[en_name.upper()] = (en_name, zh_name)
+                compact = en_name.upper().replace(" ", "").replace("-", "")
+                self._compact_index[compact] = zh_name
 
     def lookup(self, english: str) -> str | None:
-        """Look up Chinese translation for an English term."""
-        return self.en_to_zh.get(english) or self.en_to_zh.get(english.upper())
+        """Look up Chinese translation for an English term.
+
+        Falls back to compact matching (no spaces/hyphens) for GBA's
+        truncated names like THUNDERPUNCH → Thunder Punch.
+        """
+        result = self.en_to_zh.get(english) or self.en_to_zh.get(english.upper())
+        if result:
+            return result
+        compact = english.upper().replace(" ", "").replace("-", "")
+        return self._compact_index.get(compact)
 
     def apply_to_text(self, text: str) -> str:
         """Apply glossary replacements to text using word-boundary matching."""

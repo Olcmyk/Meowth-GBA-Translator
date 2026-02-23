@@ -55,7 +55,7 @@ public class TextExtractor
             ["data.pokemon.names"] = ("pokemon_names", null),
             ["data.pokemon.type.names"] = ("type_names", 18),
             ["data.items.stats"] = ("item_names", 375),
-            ["data.moves.names"] = ("move_names", null),
+            ["data.pokemon.moves.names"] = ("move_names", null),
             ["data.abilities.names"] = ("ability_names", null),
             ["data.pokemon.natures.names"] = ("nature_names", null),
             ["data.trainers.classes.names"] = ("trainer_classes", null),
