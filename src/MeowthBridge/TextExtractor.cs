@@ -138,6 +138,11 @@ public class TextExtractor
         {
             if (_model[i] != 0x0F) continue; // loadpointer opcode
 
+            // GBA Pokémon script engine only has 4 banks (0-3).
+            // Any other value means this 0x0F byte is data, not a loadpointer.
+            byte bank = _model[i + 1];
+            if (bank > 3) continue;
+
             int ptrOffset = i + 2;
             if (ptrOffset + 4 > _model.Count) continue;
 
@@ -158,24 +163,34 @@ public class TextExtractor
     }
 
     /// <summary>
-    /// Phase 3: 提取 HMA 识别的 PCSRun 文本，但指针源仅使用 loadpointer 验证的结果。
-    /// HMA 的 PCSRun 文本发现是可靠的，但其 PointerSources 来自全 ROM 扫描，
-    /// 会把跳转表、函数指针表等误判为文本指针 —— 写入时会破坏代码导致崩溃。
+    /// Phase 3: 提取 HMA 识别的 PCSRun 文本。
+    /// 指针源仅使用 loadpointer 扫描结果，不使用 HMA 的 PointerSources。
+    /// HMA 的 PointerSources 来自全 ROM 扫描，会误判数据结构中的指针，
+    /// 修改后导致游戏崩溃（背包跳转表、地图事件表等）。
     /// </summary>
+    // ARM 代码段结束地址 — 此地址之前的 PCSRun 是误判（机器码碰巧像文本）
+    private const int MIN_TEXT_ADDRESS = 0x0A0000;
+
     private void ExtractHmaTextsWithSafePointers(
         List<TextEntry> entries, HashSet<int> extractedAddresses, ref int id,
         Dictionary<int, HashSet<int>> loadpointerMap)
     {
-        int withLpPtrs = 0, inPlaceOnly = 0, noRefs = 0, tooShort = 0;
+        int withPtrs = 0, inPlaceOnly = 0, noRefs = 0, tooShort = 0, armSkipped = 0;
 
         foreach (var run in _model.All<PCSRun>())
         {
             if (extractedAddresses.Contains(run.Start)) continue;
 
+            // 跳过 ARM 代码段中的伪文本 — 机器码字节碰巧通过 PCS 验证
+            if (run.Start < MIN_TEXT_ADDRESS)
+            {
+                armSkipped++;
+                continue;
+            }
+
             var hmaPointers = run.PointerSources?.ToList() ?? new List<int>();
             bool hasLoadpointer = loadpointerMap.ContainsKey(run.Start);
 
-            // 既无 HMA 指针也无 loadpointer 引用 → 跳过
             if (hmaPointers.Count == 0 && !hasLoadpointer)
             {
                 noRefs++;
@@ -193,12 +208,12 @@ public class TextExtractor
             }
             extractedAddresses.Add(run.Start);
 
-            // 仅使用 loadpointer 验证的安全指针源
+            // 仅使用 loadpointer 验证的指针源
             var safePointers = hasLoadpointer
                 ? loadpointerMap[run.Start].Select(p => $"0x{p:X}").ToList()
                 : new List<string>();
 
-            if (hasLoadpointer) withLpPtrs++;
+            if (hasLoadpointer) withPtrs++;
             else inPlaceOnly++;
 
             entries.Add(new TextEntry
@@ -214,8 +229,8 @@ public class TextExtractor
         }
 
         Console.Error.WriteLine(
-            $"  有loadpointer指针: {withLpPtrs}, 仅就地写入: {inPlaceOnly}, " +
-            $"无引用跳过: {noRefs}, 太短跳过: {tooShort}");
+            $"  有loadpointer指针: {withPtrs}, 仅就地写入: {inPlaceOnly}, " +
+            $"无引用跳过: {noRefs}, 太短跳过: {tooShort}, ARM代码跳过: {armSkipped}");
     }
 
     /// <summary>

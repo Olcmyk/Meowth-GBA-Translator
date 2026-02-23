@@ -116,6 +116,11 @@ class RomWriter:
         entry_id = entry.get("id", "")
         pointer_sources = entry.get("pointer_sources", [])
 
+        # Defense-in-depth: never write in-place to the ARM code section
+        if address < self.MIN_POINTER_SOURCE and not pointer_sources:
+            stats["skipped_same"] += 1
+            return
+
         # Skip if no translation or same as original
         if not translated or translated == original:
             stats["skipped_same"] += 1
@@ -264,10 +269,17 @@ class RomWriter:
                 orig_text_end - write_len
             )
 
+    # Font patch Chinese character high bytes: 0x01-0x1E excluding 0x06, 0x1B
+    _CHINESE_HIGH_BYTES = (
+        set(range(0x01, 0x06)) | set(range(0x07, 0x1B)) | set(range(0x1C, 0x1F))
+    )
+
     def _truncate_encoded(self, encoded: bytes, max_length: int) -> bytes:
         """Truncate encoded text to fit max length, ensuring valid termination.
 
-        Avoids splitting 2-byte CJK characters (high byte >= 0x80 in font patch).
+        Respects multi-byte boundaries for:
+        - Font patch Chinese chars (high bytes 0x01-0x1E excl 0x06/0x1B)
+        - FC/FD control codes with argument bytes
         """
         if len(encoded) <= max_length:
             return encoded
@@ -278,8 +290,8 @@ class RomWriter:
             b = encoded[i]
             if b == 0xFF:
                 break
-            # 2-byte CJK char: high byte in font patch range
-            if b >= 0x80 and b not in (0xFA, 0xFB, 0xFC, 0xFD, 0xFE, 0xFF):
+            # Font patch 2-byte Chinese character
+            if b in self._CHINESE_HIGH_BYTES:
                 if i + 2 > max_length - 1:
                     break  # not enough room for this char + terminator
                 i += 2
@@ -364,6 +376,11 @@ class RomWriter:
 
         address = int(entry.get("address", "0x0").replace("0x", ""), 16)
         pointer_sources = entry.get("pointer_addresses", entry.get("pointer_sources", []))
+
+        # Defense-in-depth: never write in-place to the ARM code section
+        if address < self.MIN_POINTER_SOURCE and not pointer_sources:
+            stats["skipped"] += 1
+            return
 
         if not translated or translated == original:
             stats["skipped"] += 1
