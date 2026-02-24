@@ -21,29 +21,21 @@ public class TextExtractor
         var extractedAddresses = new HashSet<int>();
         int id = 0;
 
-        // Phase 1: 从表格提取（100% 准确）
+        // Phase 1: 提取表格文本（100% 准确，HMA 已识别表格结构）
         Console.Error.WriteLine("Phase 1: 提取表格文本...");
         ExtractTableTexts(entries, extractedAddresses, ref id);
         Console.Error.WriteLine($"  表格文本: {entries.Count} 条");
 
         // Phase 2: 扫描 loadpointer 指令，构建安全的指针源映射
-        // 只信任脚本中明确的 loadpointer (0x0F) 指令作为指针源
-        // 不使用 HMA 的 SearchForPointers（全 ROM 扫描会误判跳转表等为指针）
         Console.Error.WriteLine("Phase 2: 扫描 loadpointer 指令...");
         var loadpointerMap = ScanLoadpointerSources();
         Console.Error.WriteLine($"  发现 {loadpointerMap.Count} 个文本地址的 loadpointer 引用");
 
-        // Phase 3: 提取 HMA 识别的文本，仅使用 loadpointer 验证的指针源
-        Console.Error.WriteLine("Phase 3: 提取 HMA 识别的文本...");
-        int beforeHma = entries.Count;
-        ExtractHmaTextsWithSafePointers(entries, extractedAddresses, ref id, loadpointerMap);
-        Console.Error.WriteLine($"  HMA 文本: {entries.Count - beforeHma} 条");
-
-        // Phase 4: 补充 loadpointer 发现但 HMA 未识别的文本
-        Console.Error.WriteLine("Phase 4: 补充 loadpointer 文本...");
+        // Phase 3: 提取 loadpointer 引用的文本（脚本明确引用，非常安全）
+        Console.Error.WriteLine("Phase 3: 提取 loadpointer 文本...");
         int beforeLp = entries.Count;
-        ExtractRemainingLoadpointerTexts(entries, extractedAddresses, ref id, loadpointerMap);
-        Console.Error.WriteLine($"  loadpointer 补充: {entries.Count - beforeLp} 条");
+        ExtractLoadpointerTexts(entries, extractedAddresses, ref id, loadpointerMap);
+        Console.Error.WriteLine($"  loadpointer 文本: {entries.Count - beforeLp} 条");
 
         return entries;
     }
@@ -52,6 +44,7 @@ public class TextExtractor
     {
         var tableNames = new Dictionary<string, (string category, int? knownCount)>
         {
+            // 基础数据表
             ["data.pokemon.names"] = ("pokemon_names", null),
             ["data.pokemon.type.names"] = ("type_names", 18),
             ["data.items.stats"] = ("item_names", 375),
@@ -59,7 +52,26 @@ public class TextExtractor
             ["data.abilities.names"] = ("ability_names", null),
             ["data.pokemon.natures.names"] = ("nature_names", null),
             ["data.trainers.classes.names"] = ("trainer_classes", null),
-            ["data.maps.banks"] = ("map_names", null),
+
+            // 描述文本
+            ["data.abilities.descriptions"] = ("ability_descriptions", null),
+            ["data.pokemon.moves.descriptions"] = ("move_descriptions", null),
+
+            // 地图和栖息地
+            ["data.maps.names"] = ("map_names", null),
+            ["data.maps.banks"] = ("map_banks", null),
+            ["data.pokedex.habitat.names"] = ("habitat_names", null),
+
+            // 战斗和菜单文本
+            ["data.battle.text"] = ("battle_text", null),
+            ["data.menus.text.options"] = ("menu_options", null),
+            ["data.menus.text.pc"] = ("menu_pc", null),
+            ["data.menus.text.pcoptions"] = ("menu_pcoptions", null),
+            ["data.menus.text.pokemon"] = ("menu_pokemon", null),
+            ["data.text.menu.itemStorage"] = ("menu_item_storage", null),
+            ["data.text.menu.pause"] = ("menu_pause", null),
+            ["data.text.menu.pokemon.options"] = ("menu_pokemon_options", null),
+            ["data.text.trade.messages"] = ("trade_messages", null),
         };
 
         foreach (var (tableName, (category, knownCount)) in tableNames)
@@ -75,7 +87,7 @@ public class TextExtractor
 
             for (int i = 0; i < elementCount; i++)
             {
-                var (text, textAddress) = ExtractTableElementText(tableRun, i);
+                var (text, textAddress, textLength) = ExtractTableElementText(tableRun, i);
                 if (string.IsNullOrEmpty(text)) continue;
 
                 extractedAddresses.Add(textAddress);
@@ -86,7 +98,7 @@ public class TextExtractor
                     Category = category,
                     Address = $"0x{textAddress:X}",
                     Original = text,
-                    ByteLength = tableRun.ElementLength,
+                    ByteLength = textLength,  // 使用实际文本长度
                     IsPointerBased = false,
                     TableName = tableName,
                     TableIndex = i
@@ -95,7 +107,7 @@ public class TextExtractor
         }
     }
 
-    private (string? text, int address) ExtractTableElementText(ITableRun tableRun, int index)
+    private (string? text, int address, int length) ExtractTableElementText(ITableRun tableRun, int index)
     {
         var elementStart = tableRun.Start + index * tableRun.ElementLength;
         int segmentOffset = 0;
@@ -105,7 +117,7 @@ public class TextExtractor
             if (segment.Type == ElementContentType.PCS)
             {
                 var text = _model.TextConverter.Convert(_model, elementStart + segmentOffset, segment.Length);
-                return (text, elementStart + segmentOffset);
+                return (text, elementStart + segmentOffset, segment.Length);
             }
             if (segment.Type == ElementContentType.Pointer)
             {
@@ -116,13 +128,13 @@ public class TextExtractor
                     if (run is PCSRun pcsRun && run.Start == pointer)
                     {
                         var text = _model.TextConverter.Convert(_model, pcsRun.Start, pcsRun.Length);
-                        return (text, pcsRun.Start);
+                        return (text, pcsRun.Start, pcsRun.Length);
                     }
                 }
             }
             segmentOffset += segment.Length;
         }
-        return (null, 0);
+        return (null, 0, 0);
     }
 
     /// <summary>
@@ -163,81 +175,10 @@ public class TextExtractor
     }
 
     /// <summary>
-    /// Phase 3: 提取 HMA 识别的 PCSRun 文本。
-    /// 指针源仅使用 loadpointer 扫描结果，不使用 HMA 的 PointerSources。
-    /// HMA 的 PointerSources 来自全 ROM 扫描，会误判数据结构中的指针，
-    /// 修改后导致游戏崩溃（背包跳转表、地图事件表等）。
+    /// Phase 3: 提取 loadpointer 引用的文本
+    /// 只提取脚本中明确通过 loadpointer (0x0F) 指令引用的文本
     /// </summary>
-    // ARM 代码段结束地址 — 此地址之前的 PCSRun 是误判（机器码碰巧像文本）
-    private const int MIN_TEXT_ADDRESS = 0x0A0000;
-
-    private void ExtractHmaTextsWithSafePointers(
-        List<TextEntry> entries, HashSet<int> extractedAddresses, ref int id,
-        Dictionary<int, HashSet<int>> loadpointerMap)
-    {
-        int withPtrs = 0, inPlaceOnly = 0, noRefs = 0, tooShort = 0, armSkipped = 0;
-
-        foreach (var run in _model.All<PCSRun>())
-        {
-            if (extractedAddresses.Contains(run.Start)) continue;
-
-            // 跳过 ARM 代码段中的伪文本 — 机器码字节碰巧通过 PCS 验证
-            if (run.Start < MIN_TEXT_ADDRESS)
-            {
-                armSkipped++;
-                continue;
-            }
-
-            var hmaPointers = run.PointerSources?.ToList() ?? new List<int>();
-            bool hasLoadpointer = loadpointerMap.ContainsKey(run.Start);
-
-            if (hmaPointers.Count == 0 && !hasLoadpointer)
-            {
-                noRefs++;
-                continue;
-            }
-
-            var text = _model.TextConverter.Convert(_model, run.Start, run.Length);
-            if (string.IsNullOrEmpty(text) || text == "\"\"") continue;
-
-            var cleanText = text.Trim('"');
-            if (cleanText.Length < 1)
-            {
-                tooShort++;
-                continue;
-            }
-            extractedAddresses.Add(run.Start);
-
-            // 仅使用 loadpointer 验证的指针源
-            var safePointers = hasLoadpointer
-                ? loadpointerMap[run.Start].Select(p => $"0x{p:X}").ToList()
-                : new List<string>();
-
-            if (hasLoadpointer) withPtrs++;
-            else inPlaceOnly++;
-
-            entries.Add(new TextEntry
-            {
-                Id = $"scr_{id++:D5}",
-                Category = "scripts",
-                Address = $"0x{run.Start:X}",
-                PointerSources = safePointers,
-                Original = text,
-                ByteLength = run.Length,
-                IsPointerBased = hasLoadpointer
-            });
-        }
-
-        Console.Error.WriteLine(
-            $"  有loadpointer指针: {withPtrs}, 仅就地写入: {inPlaceOnly}, " +
-            $"无引用跳过: {noRefs}, 太短跳过: {tooShort}, ARM代码跳过: {armSkipped}");
-    }
-
-    /// <summary>
-    /// Phase 4: 补充 loadpointer 发现但 HMA 未识别的文本
-    /// 这些文本没有对应的 PCSRun（HMA 未识别），但有明确的 loadpointer 引用
-    /// </summary>
-    private void ExtractRemainingLoadpointerTexts(
+    private void ExtractLoadpointerTexts(
         List<TextEntry> entries, HashSet<int> extractedAddresses, ref int id,
         Dictionary<int, HashSet<int>> loadpointerMap)
     {
@@ -258,7 +199,6 @@ public class TextExtractor
 
             extractedAddresses.Add(textAddr);
 
-            // 仅使用 loadpointer 发现的安全指针源，不合并 HMA 的 PointerSources
             entries.Add(new TextEntry
             {
                 Id = $"scr_{id++:D5}",
@@ -271,8 +211,6 @@ public class TextExtractor
             });
             found++;
         }
-
-        Console.Error.WriteLine($"  loadpointer 补充: {found} 条");
     }
 
     /// <summary>
@@ -398,6 +336,9 @@ public class TextEntry
 
     [JsonPropertyName("table_index")]
     public int? TableIndex { get; set; }
+
+    [JsonPropertyName("translated")]
+    public string? Translated { get; set; }
 }
 
 

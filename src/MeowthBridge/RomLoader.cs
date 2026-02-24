@@ -14,6 +14,18 @@ public static class RomLoader
         return model;
     }
 
+    public static async Task Save(IDataModel model, string outputPath)
+    {
+        // 等待所有待处理的工作完成
+        if (model is HardcodeTablesModel htModel)
+        {
+            await htModel.InitializationWorkload;
+        }
+
+        // 保存 ROM 数据
+        File.WriteAllBytes(outputPath, model.RawData.ToArray());
+    }
+
     public static string GetGameCode(IDataModel model)
     {
         // GBA game code is at offset 0xAC, 4 bytes + version byte at 0xBC
