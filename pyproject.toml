@@ -3,10 +3,25 @@ requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "meowth-translator"
+name = "meowth"
 version = "0.1.0"
-description = "GBA Pokemon ROM English-to-Chinese translation tool"
+description = "AI-powered GBA Pokemon ROM translation tool — translate any Pokemon ROM hack into Chinese with one command"
+readme = "README.md"
+license = "MIT"
 requires-python = ">=3.10"
+authors = [
+    {name = "Olcmyk"},
+]
+keywords = ["pokemon", "gba", "rom", "translation", "hack", "chinese"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: End Users/Desktop",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Games/Entertainment",
+]
 dependencies = [
     "click>=8.0",
     "httpx>=0.25",
