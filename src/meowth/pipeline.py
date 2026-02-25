@@ -15,6 +15,29 @@ from .text_wrap import wrap_text
 from .translator import Translator
 
 # ---------------------------------------------------------------------------
+# Game detection from ROM header
+# ---------------------------------------------------------------------------
+# GBA ROM header bytes 0xAC-0xAF contain the 4-byte game code.
+_GAME_CODES: dict[str, str] = {
+    "BPRE": "firered",
+    "BPGE": "leafgreen",
+    "BPEE": "emerald",
+    "AXVE": "ruby",
+    "AXPE": "sapphire",
+}
+
+
+def detect_game(rom_path: Path) -> str:
+    """Detect game type from GBA ROM header (bytes 0xAC-0xAF).
+
+    Returns one of: "firered", "leafgreen", "emerald", "ruby", "sapphire", "unknown".
+    """
+    with open(rom_path, "rb") as f:
+        f.seek(0xAC)
+        code = f.read(4).decode("ascii", errors="replace")
+    return _GAME_CODES.get(code, "unknown")
+
+# ---------------------------------------------------------------------------
 # Format conversion: MeowthBridge {"entries":[...]} → {"tables":[], "free_texts":[]}
 # ---------------------------------------------------------------------------
 TABLE_CATEGORIES = {
@@ -118,10 +141,12 @@ class Pipeline:
         charmap: Charmap | None = None,
         glossary: Glossary | None = None,
         translator: Translator | None = None,
+        game: str = "firered",
     ):
         self.charmap = charmap or Charmap()
         self.glossary = glossary or Glossary()
         self.translator = translator or Translator()
+        self.game = game
 
     def translate_texts(
         self, texts_path: Path, output_path: Path, batch_size: int = 30,
@@ -203,11 +228,11 @@ class Pipeline:
 
     def _translate_free_batch(self, batch: list[dict]):
         """Translate a batch of free text entries via LLM."""
-        # Apply hardcoded overrides first
+        # Apply hardcoded overrides first (FireRed only)
         remaining = []
         for entry in batch:
             entry_id = entry.get("id", "")
-            if entry_id in _HARDCODED_TRANSLATIONS:
+            if self.game == "firered" and entry_id in _HARDCODED_TRANSLATIONS:
                 entry["translated"] = _HARDCODED_TRANSLATIONS[entry_id]
             else:
                 remaining.append(entry)
@@ -257,7 +282,7 @@ class Pipeline:
         data = json.loads(translations_path.read_text(encoding="utf-8"))
         data = convert_format(data)
 
-        writer = RomWriter(self.charmap)
+        writer = RomWriter(self.charmap, game=self.game)
 
         # 1. Load and expand ROM
         print("  Loading ROM...")
@@ -269,7 +294,7 @@ class Pipeline:
         print("  Applying font patch...")
         temp_rom = output_path.parent / "temp_fontpatch.gba"
         writer.save_rom(rom, temp_rom)
-        apply_font_patch(temp_rom, temp_rom)
+        apply_font_patch(temp_rom, temp_rom, game=self.game)
         rom = writer.load_rom(temp_rom)
         temp_rom.unlink(missing_ok=True)
         print("  Font patch applied")
@@ -284,12 +309,13 @@ class Pipeline:
             if "translated" in entry:
                 all_entries.append(entry)
 
-        # 3b. Load manual entries (texts not extracted by HMA)
-        manual_path = Path(__file__).parent / "manual_entries.json"
-        if manual_path.exists():
-            manual = json.loads(manual_path.read_text(encoding="utf-8"))
-            all_entries.extend(manual)
-            print(f"  Added {len(manual)} manual entries")
+        # 3b. Load manual entries (FireRed-specific, not applicable to other games)
+        if self.game == "firered":
+            manual_path = Path(__file__).parent / "manual_entries.json"
+            if manual_path.exists():
+                manual = json.loads(manual_path.read_text(encoding="utf-8"))
+                all_entries.extend(manual)
+                print(f"  Added {len(manual)} manual entries")
 
         # 4. Inject texts
         print(f"  Injecting {len(all_entries)} translated texts...")
@@ -332,6 +358,11 @@ class Pipeline:
             raise RuntimeError(
                 f"MeowthBridge failed (exit {result.returncode}):\n{result.stderr}"
             )
+        # MeowthBridge hardcodes output to work/text.json, move if needed
+        hardcoded = Path("work/text.json")
+        if not output_path.exists() and hardcoded.exists():
+            import shutil
+            shutil.move(str(hardcoded), str(output_path))
         if not output_path.exists():
             raise RuntimeError(f"MeowthBridge did not produce {output_path}")
         return output_path
@@ -343,11 +374,19 @@ class Pipeline:
         work_dir: Path,
     ) -> Path:
         """Run the full translation pipeline: extract → translate → build."""
+        # Auto-detect game if not explicitly set
+        detected = detect_game(rom_path)
+        if detected != "unknown":
+            self.game = detected
+            print(f"Detected game: {self.game}")
+        else:
+            print(f"Warning: could not detect game from ROM header, using: {self.game}")
+
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
         texts_path = work_dir / "texts.json"
         translated_path = work_dir / "texts_translated.json"
-        output_path = output_dir / f"firered_cn_{timestamp}.gba"
+        output_path = output_dir / f"{self.game}_cn_{timestamp}.gba"
 
         print("[1/3] Extracting texts from ROM...")
         self.extract_texts(rom_path, texts_path)

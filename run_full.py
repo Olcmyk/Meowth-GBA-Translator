@@ -19,12 +19,34 @@ from meowth.control_codes import protect, restore
 from meowth.glossary import Glossary
 from meowth.rom_writer import RomWriter
 from meowth.translator import Translator
-from meowth.pipeline import _HARDCODED_TRANSLATIONS
+from meowth.pipeline import _HARDCODED_TRANSLATIONS, detect_game
 
-ROM_PATH = Path("testgba/firered_en.gba")
+# ---- Game detection ----
+# Accept ROM path as first argument, or default to firered
+if len(sys.argv) > 1:
+    ROM_PATH = Path(sys.argv[1])
+else:
+    ROM_PATH = Path("testgba/firered_en.gba")
+
+game = detect_game(ROM_PATH)
+if game == "unknown":
+    print(f"Warning: could not detect game from {ROM_PATH}, defaulting to firered")
+    game = "firered"
+else:
+    print(f"Detected game: {game}")
+
+# Per-game output paths
+_OUTPUT_NAMES: dict[str, str] = {
+    "firered": "firered_cn.gba",
+    "leafgreen": "leafgreen_cn.gba",
+    "emerald": "emerald_cn.gba",
+    "ruby": "ruby_cn.gba",
+    "sapphire": "sapphire_cn.gba",
+}
+
 TEXTS_PATH = Path("work/texts.json")
 TRANSLATED_PATH = Path("work/texts_translated.json")
-OUTPUT_PATH = Path("outputs/firered_cn.gba")
+OUTPUT_PATH = Path("outputs") / _OUTPUT_NAMES.get(game, f"{game}_cn.gba")
 
 # ---- Step 1: Convert MeowthBridge format to tables + free_texts ----
 print("=" * 60)
@@ -82,11 +104,11 @@ total = len(free_texts)
 for i in range(0, total, BATCH_SIZE):
     batch = free_texts[i:i + BATCH_SIZE]
 
-    # Check hardcoded overrides first
+    # Check hardcoded overrides first (FireRed only)
     remaining = []
     for entry in batch:
         eid = entry.get("id", "")
-        if eid in _HARDCODED_TRANSLATIONS:
+        if game == "firered" and eid in _HARDCODED_TRANSLATIONS:
             entry["translated"] = _HARDCODED_TRANSLATIONS[eid]
         else:
             remaining.append(entry)
@@ -144,12 +166,13 @@ for entry in data["free_texts"]:
 
 print(f"  共 {len(all_entries)} 条待写入")
 
-writer = RomWriter(charmap)
+writer = RomWriter(charmap, game=game)
 rom = writer.load_rom(ROM_PATH)
 rom = writer.expand_rom(rom)
 print(f"  ROM 扩展到 {len(rom) // (1024*1024)}MB")
 
-rom, stats = writer.inject_texts(rom, all_entries, overrides=_HARDCODED_TRANSLATIONS)
+overrides = _HARDCODED_TRANSLATIONS if game == "firered" else None
+rom, stats = writer.inject_texts(rom, all_entries, overrides=overrides)
 print(f"  写入: {stats['in_place']} in-place, {stats['relocated']} relocated, "
       f"{stats['skipped']} skipped, {stats['errors']} errors")
 

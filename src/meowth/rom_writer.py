@@ -11,7 +11,14 @@ from .pcs_scanner import is_real_text
 class RomWriter:
     """Writes translated text to GBA ROM with pointer redirection."""
 
-    # Font patch boundary - don't write past this
+    # Per-game font patch boundaries (ROM offset where font data begins)
+    _FONT_BOUNDARIES: dict[str, int] = {
+        "firered": 0x01FD3000,
+        "leafgreen": 0x01FD3000,
+        "emerald": 0x01FD0000,  # HackFunctionAddresses 0x09FD0000 - 0x08000000
+    }
+
+    # Default for backwards compatibility
     FONT_BOUNDARY = 0x01FD3000
 
     # Fallback expansion start (vanilla FireRed only; hacks use more space)
@@ -21,7 +28,7 @@ class RomWriter:
     POINTER_OFFSET = 0x08000000
 
     # Minimum safe pointer source address.
-    # ARM code section ends around 0x0A0000 in FRLG.  Pointer sources
+    # ARM code section ends around 0x0A0000 in FRLG/Emerald.  Pointer sources
     # inside the code section are literal-pool entries that look like
     # pointers but are actually ARM instructions — writing to them
     # corrupts the executable code and crashes the game.
@@ -30,8 +37,9 @@ class RomWriter:
     # Minimum contiguous free block required (bytes)
     _MIN_FREE_BLOCK = 512 * 1024  # 512 KB
 
-    def __init__(self, charmap: Optional[Charmap] = None):
+    def __init__(self, charmap: Optional[Charmap] = None, game: str = "firered"):
         self.charmap = charmap or get_default_charmap()
+        self.FONT_BOUNDARY = self._FONT_BOUNDARIES.get(game, 0x01FD3000)
         self.write_offset = self.EXPANSION_START  # updated in inject()
 
     @staticmethod

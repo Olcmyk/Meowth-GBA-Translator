@@ -4,32 +4,78 @@ import shutil
 import subprocess
 from pathlib import Path
 
-FONT_PATCH_DIR = Path(__file__).parent.parent.parent / "Pokemon_GBA_Font_Patch" / "pokeFRLG"
+_PATCH_ROOT = Path(__file__).parent.parent.parent / "Pokemon_GBA_Font_Patch"
 DEFAULT_ARMIPS = Path(__file__).parent.parent.parent / "tools" / "armips"
+
+# Per-game configuration for the font patch
+_GAME_CONFIG: dict[str, dict] = {
+    "firered": {
+        "subdir": "pokeFRLG",
+        "asm": "main_FR.asm",
+        "baserom": "baserom_FR.gba",
+        "output": "chsfontrom_FR.gba",
+        "use_strequ": False,
+    },
+    "leafgreen": {
+        "subdir": "pokeFRLG",
+        "asm": "main_FR.asm",
+        "baserom": "baserom_FR.gba",
+        "output": "chsfontrom_FR.gba",
+        "use_strequ": False,
+    },
+    "emerald": {
+        "subdir": "pokeE",
+        "asm": "main_E.asm",
+        "baserom": "baserom_E.gba",
+        "output": "baserom_E_chs.gba",
+        "use_strequ": True,
+    },
+}
 
 
 def apply_font_patch(
     rom_path: Path,
     output_path: Path,
     armips_path: Path = DEFAULT_ARMIPS,
-    font_patch_dir: Path = FONT_PATCH_DIR,
+    game: str = "firered",
 ) -> Path:
     """Apply Chinese font patch to a ROM.
 
-    1. Copy ROM to font_patch_dir/baserom_FR.gba
-    2. Run armips on main_FR.asm
-    3. Copy output to output_path
+    For FireRed/LeafGreen:
+        1. Copy ROM to pokeFRLG/baserom_FR.gba
+        2. Run armips on main_FR.asm (hardcoded filenames)
+        3. Copy chsfontrom_FR.gba to output_path
+
+    For Emerald:
+        1. Copy ROM to pokeE/baserom_E.gba
+        2. Run armips on main_E.asm with -strequ params
+        3. Copy baserom_E_chs.gba to output_path
     """
-    baserom = font_patch_dir / "baserom_FR.gba"
-    patched = font_patch_dir / "chsfontrom_FR.gba"
+    cfg = _GAME_CONFIG.get(game)
+    if cfg is None:
+        raise ValueError(f"Unsupported game for font patch: {game}")
+
+    font_patch_dir = _PATCH_ROOT / cfg["subdir"]
+    baserom = font_patch_dir / cfg["baserom"]
+    patched = font_patch_dir / cfg["output"]
+    asm_file = font_patch_dir / cfg["asm"]
 
     # Copy ROM as baserom
     shutil.copy2(rom_path, baserom)
 
-    # Run armips from the font patch directory (it uses relative paths)
-    asm_file = font_patch_dir / "main_FR.asm"
+    # Build armips command
+    if cfg["use_strequ"]:
+        cmd = [
+            str(armips_path),
+            str(asm_file),
+            "-strequ", "Origin_Rom", str(baserom),
+            "-strequ", "Chinese_Patched_Rom", str(patched),
+        ]
+    else:
+        cmd = [str(armips_path), str(asm_file)]
+
     result = subprocess.run(
-        [str(armips_path), str(asm_file)],
+        cmd,
         cwd=str(font_patch_dir),
         capture_output=True,
         text=True,
