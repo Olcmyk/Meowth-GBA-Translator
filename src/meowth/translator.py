@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 import threading
+import time
 from pathlib import Path
 
 import httpx
@@ -129,27 +130,36 @@ class Translator:
         print(f"  [批量分割不匹配 ({len(parts)} vs {len(texts)})，逐条翻译]")
         return self._translate_individually(texts, glossary_context)
 
-    def _call_api(self, system: str, user: str) -> str:
+    def _call_api(self, system: str, user: str, max_retries: int = 3) -> str:
         """Send a single chat completion request and return the content."""
-        response = httpx.post(
-            f"{self.base_url}/chat/completions",
-            headers={
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": self.model,
-                "messages": [
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": user},
-                ],
-                "temperature": 0.3,
-                "max_tokens": 4096,
-            },
-            timeout=120.0,
-        )
-        response.raise_for_status()
-        return response.json()["choices"][0]["message"]["content"]
+        for attempt in range(max_retries):
+            try:
+                response = httpx.post(
+                    f"{self.base_url}/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {self.api_key}",
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "model": self.model,
+                        "messages": [
+                            {"role": "system", "content": system},
+                            {"role": "user", "content": user},
+                        ],
+                        "temperature": 0.3,
+                        "max_tokens": 4096,
+                    },
+                    timeout=120.0,
+                )
+                response.raise_for_status()
+                return response.json()["choices"][0]["message"]["content"]
+            except (httpx.RemoteProtocolError, httpx.ReadTimeout, httpx.ConnectError) as e:
+                if attempt < max_retries - 1:
+                    wait = 2 ** attempt
+                    print(f"  [API 请求失败: {e}，{wait}秒后重试 ({attempt+1}/{max_retries})]")
+                    time.sleep(wait)
+                else:
+                    raise
 
     def _translate_individually(
         self, texts: list[str], glossary_context: str = ""

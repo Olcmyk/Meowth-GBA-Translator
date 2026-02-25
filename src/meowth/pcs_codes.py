@@ -85,6 +85,7 @@ FD_MACROS: dict[int, str] = {
     0x02: "[buffer1]",
     0x03: "[buffer2]",
     0x04: "[buffer3]",
+    0x05: "[kun]",
     0x06: "[rival]",
 }
 

@@ -10,6 +10,7 @@ from .charmap import Charmap
 from .control_codes import protect, restore
 from .font_patch import apply_font_patch
 from .glossary import Glossary
+from .pcs_codes import FD_MACROS
 from .rom_writer import RomWriter
 from .text_wrap import wrap_text
 from .translator import Translator
@@ -133,6 +134,28 @@ def _strip_llm_newlines(text: str) -> str:
     # Restore paragraph breaks
     text = text.replace(_PARA, "\n\n")
     return text
+
+
+def _postprocess_fd_macros(json_path: Path):
+    """Replace HMA's raw FD escape sequences (e.g. \\\\05) with named macros (e.g. [kun]).
+
+    HMA only recognises a few FD codes ([player], [rival], etc.).
+    Any FD code it doesn't know gets output as \\\\XX.
+    We patch those using our FD_MACROS table so every extraction is consistent.
+    """
+    # Build replacement map: only for codes HMA doesn't already handle
+    _HMA_KNOWN = {0x01, 0x02, 0x03, 0x04, 0x06}  # player, buffer1-3, rival
+    replacements = {}
+    for code, name in FD_MACROS.items():
+        if code not in _HMA_KNOWN:
+            # In JSON the text looks like \\\\05 (escaped backslashes + hex)
+            replacements[f"\\\\\\\\{code:02X}"] = name
+    if not replacements:
+        return
+    text = json_path.read_text(encoding="utf-8")
+    for raw, macro in replacements.items():
+        text = text.replace(raw, macro)
+    json_path.write_text(text, encoding="utf-8")
 
 
 class Pipeline:
@@ -279,6 +302,12 @@ class Pipeline:
         output_path: Path,
     ) -> Path:
         """Build final Chinese ROM."""
+        # Auto-detect game from ROM header
+        detected = detect_game(original_rom)
+        if detected != "unknown":
+            self.game = detected
+            print(f"  Detected game: {self.game}")
+
         data = json.loads(translations_path.read_text(encoding="utf-8"))
         data = convert_format(data)
 
@@ -365,6 +394,8 @@ class Pipeline:
             shutil.move(str(hardcoded), str(output_path))
         if not output_path.exists():
             raise RuntimeError(f"MeowthBridge did not produce {output_path}")
+        # Post-process: replace HMA's raw FD escapes with named macros
+        _postprocess_fd_macros(output_path)
         return output_path
 
     def run_full(
