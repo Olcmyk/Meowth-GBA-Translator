@@ -27,10 +27,11 @@ public class RealTranslator
 4. POKéMON / Pokémon 翻译为""宝可梦""
 5. 保持游戏对话的自然口语风格
 6. 只返回翻译结果，不要任何解释
-7. 翻译时不需要考虑换行，系统会自动排版
+7. 翻译时不要插入任何换行符，输出纯文本即可，系统会自动排版
 8. 保留所有 \. 等待标记
-9. 保留 {PARA} 段落分隔标记
-10. ""rival"" 翻译为""劲敌""，不要翻译为具体人名
+9. 保留 {PARA} 段落分隔标记，原样输出
+10. 保留 {SEMNL} 语义换行标记，原样输出
+11. ""rival"" 翻译为""劲敌""，不要翻译为具体人名
 
 多条文本用 ||| 分隔，请逐条翻译并用 ||| 分隔返回。";
 
@@ -57,7 +58,7 @@ public class RealTranslator
         var cacheFile = Path.Combine(_cacheDir, $"{GetCacheKey(text)}.txt");
         if (File.Exists(cacheFile))
         {
-            try { return File.ReadAllText(cacheFile); }
+            try { return CleanResponse(File.ReadAllText(cacheFile)); }
             catch { return null; }
         }
         return null;
@@ -71,19 +72,41 @@ public class RealTranslator
     }
 
     /// <summary>
-    /// 批量翻译 API 调用：多条预处理后的文本用 ||| 分隔
+    /// 批量翻译 API 调用：多条预处理后的文本用 ||| 分隔。
+    /// 如果 LLM 返回的分割数量不匹配，回退到逐条翻译。
     /// </summary>
     private async Task<string[]> TranslateBatchAsync(string[] preprocessedTexts)
     {
         var joined = string.Join(" ||| ", preprocessedTexts);
 
+        var translated = await CallApiAsync(joined);
+        var parts = translated.Split("|||").Select(s => s.Trim()).ToArray();
+
+        if (parts.Length == preprocessedTexts.Length)
+            return parts;
+
+        // 分割不匹配 — 逐条翻译
+        Console.Error.WriteLine($"  Warning: batch split mismatch (expected {preprocessedTexts.Length}, got {parts.Length}), falling back to individual translation");
+        var results = new string[preprocessedTexts.Length];
+        for (int i = 0; i < preprocessedTexts.Length; i++)
+        {
+            results[i] = await CallApiAsync(preprocessedTexts[i]);
+        }
+        return results;
+    }
+
+    /// <summary>
+    /// 单次 API 调用
+    /// </summary>
+    private async Task<string> CallApiAsync(string userContent)
+    {
         var requestBody = new
         {
             model = _model,
             messages = new[]
             {
                 new { role = "system", content = SystemPrompt },
-                new { role = "user", content = joined }
+                new { role = "user", content = userContent }
             },
             temperature = 0.3
         };
@@ -101,20 +124,17 @@ public class RealTranslator
         if (result?.Usage != null)
             Interlocked.Add(ref _totalTokens, result.Usage.TotalTokens);
 
-        var translated = result?.Choices?[0]?.Message?.Content?.Trim() ?? joined;
-        var parts = translated.Split("|||").Select(s => s.Trim()).ToArray();
+        return CleanResponse(result?.Choices?[0]?.Message?.Content?.Trim() ?? userContent);
+    }
 
-        // 如果分割数量不匹配，尝试补齐
-        if (parts.Length != preprocessedTexts.Length)
-        {
-            Console.Error.WriteLine($"  Warning: batch split mismatch (expected {preprocessedTexts.Length}, got {parts.Length})");
-            var padded = new string[preprocessedTexts.Length];
-            for (int i = 0; i < preprocessedTexts.Length; i++)
-                padded[i] = i < parts.Length ? parts[i] : preprocessedTexts[i];
-            return padded;
-        }
-
-        return parts;
+    /// <summary>
+    /// 清理 LLM 返回的多余内容（尾部 |||、前导解释文字等）
+    /// </summary>
+    private static string CleanResponse(string text)
+    {
+        // LLM 有时在单条翻译末尾也加 |||
+        text = text.TrimEnd('|').TrimEnd();
+        return text;
     }
     /// <summary>
     /// 三阶段翻译流水线：预处理 → 批量API翻译 → 后处理

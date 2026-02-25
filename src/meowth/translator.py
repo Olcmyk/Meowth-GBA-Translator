@@ -3,7 +3,6 @@
 import hashlib
 import json
 import os
-import re
 import threading
 from pathlib import Path
 
@@ -23,7 +22,7 @@ SYSTEM_PROMPT = """你是一个专业的宝可梦游戏本地化翻译专家。�
 6. 人名地名等专有名词如果有官方译名则使用官方译名，否则音译
 7. 只返回翻译结果，不要任何解释或注释
 8. 如果输入文本中没有任何可翻译的内容（纯符号或乱码），请原封不动地返回原文
-9. 翻译时不需要考虑换行，系统会自动排版
+9. 翻译时不要插入任何换行符，输出纯文本即可，系统会自动排版
 10. 保留所有 \\. 等待标记的位置，它们表示游戏中的停顿效果
 11. 保留段落分隔（空行），它们表示游戏中的翻页
 
@@ -84,7 +83,12 @@ class Translator:
     def translate_batch(
         self, texts: list[str], glossary_context: str = ""
     ) -> list[str]:
-        """Translate a batch of texts. Uses cache when available."""
+        """Translate a batch of texts. Uses cache when available.
+
+        Sends all texts joined by ||| in one API call.  If the LLM response
+        splits into the wrong number of segments, falls back to translating
+        each text individually to avoid misalignment.
+        """
         joined = " ||| ".join(texts)
         system = SYSTEM_PROMPT.replace("{glossary}", glossary_context or "（无）")
         user = USER_PROMPT.replace("{texts}", joined)
@@ -98,10 +102,35 @@ class Translator:
         cache_key = self._cache_key(request_data)
         cached = self._get_cached(cache_key)
         if cached is not None:
-            results = self._split_results(cached, len(texts), texts)
-            return results
+            parts = [t.strip() for t in cached.split("|||")]
+            if len(parts) == len(texts):
+                return parts
+            # Cache had misaligned result — fall through to re-translate
+            print(f"  [缓存分割不匹配 ({len(parts)} vs {len(texts)})，重新翻译]")
 
         # Call DeepSeek API
+        content = self._call_api(system, user)
+
+        # Split and check alignment
+        parts = [t.strip() for t in content.split("|||")]
+        if len(parts) == len(texts):
+            # Perfect split — cache and return
+            has_untranslated = any(
+                self._translation_unchanged(orig, trans)
+                for orig, trans in zip(texts, parts)
+            )
+            if not has_untranslated:
+                self._save_cache(cache_key, request_data, content)
+            else:
+                print(f"  [部分未翻译，不缓存此批次]")
+            return parts
+
+        # Misaligned — fall back to one-by-one translation
+        print(f"  [批量分割不匹配 ({len(parts)} vs {len(texts)})，逐条翻译]")
+        return self._translate_individually(texts, glossary_context)
+
+    def _call_api(self, system: str, user: str) -> str:
+        """Send a single chat completion request and return the content."""
         response = httpx.post(
             f"{self.base_url}/chat/completions",
             headers={
@@ -120,19 +149,31 @@ class Translator:
             timeout=120.0,
         )
         response.raise_for_status()
-        content = response.json()["choices"][0]["message"]["content"]
+        return response.json()["choices"][0]["message"]["content"]
 
-        # Only cache if the result actually contains translations
-        results = self._split_results(content, len(texts), texts)
-        has_untranslated = any(
-            self._translation_unchanged(orig, trans)
-            for orig, trans in zip(texts, results)
-        )
-        if not has_untranslated:
-            self._save_cache(cache_key, request_data, content)
-        else:
-            print(f"  [部分未翻译，不缓存此批次]")
+    def _translate_individually(
+        self, texts: list[str], glossary_context: str = ""
+    ) -> list[str]:
+        """Translate texts one by one as fallback when batch splitting fails."""
+        system = SYSTEM_PROMPT.replace("{glossary}", glossary_context or "（无）")
+        results = []
+        for text in texts:
+            user = f"请将以下宝可梦游戏文本从英文翻译成简体中文。\n\n{text}"
+            request_data = {
+                "model": self.model,
+                "system": system,
+                "user": user,
+            }
+            cache_key = self._cache_key(request_data)
+            cached = self._get_cached(cache_key)
+            if cached is not None:
+                results.append(cached)
+                continue
 
+            content = self._call_api(system, user)
+            if not self._translation_unchanged(text, content):
+                self._save_cache(cache_key, request_data, content)
+            results.append(content)
         return results
 
     @staticmethod
@@ -154,55 +195,3 @@ class Translator:
 
         return False
 
-    @staticmethod
-    def _split_results(
-        content: str, expected: int, originals: list[str]
-    ) -> list[str]:
-        """Split LLM response by ||| and align with expected count.
-
-        If the LLM produced more segments than expected (e.g. a translation
-        contained |||), try to merge excess segments back together.
-        """
-        parts = [t.strip() for t in content.split("|||")]
-
-        if len(parts) == expected:
-            return parts
-
-        if len(parts) > expected:
-            # Too many splits — merge excess segments back.
-            # Strategy: greedily assign segments to each expected slot,
-            # merging adjacent segments when we have too many.
-            merged: list[str] = []
-            extra = len(parts) - expected
-            i = 0
-            for slot in range(expected):
-                merged.append(parts[i])
-                i += 1
-                # Distribute extra segments to earlier slots
-                if extra > 0 and slot < expected - 1:
-                    # Check if next part looks like a continuation
-                    # (doesn't start with a CJK char or capital letter)
-                    while extra > 0 and i < len(parts):
-                        next_part = parts[i]
-                        if next_part and (
-                            next_part[0].islower()
-                            or not next_part[0].isalpha()
-                        ):
-                            merged[-1] += "|||" + next_part
-                            i += 1
-                            extra -= 1
-                        else:
-                            break
-            # Append any remaining
-            while i < len(parts):
-                if len(merged) < expected:
-                    merged.append(parts[i])
-                else:
-                    merged[-1] += "|||" + parts[i]
-                i += 1
-            parts = merged
-
-        # Pad with originals if too few
-        while len(parts) < expected:
-            parts.append(originals[len(parts)])
-        return parts[:expected]

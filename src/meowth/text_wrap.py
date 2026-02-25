@@ -15,7 +15,7 @@ Three-level break handling:
 
 import re
 
-LINE_WIDTH = 30        # max width units per line
+LINE_WIDTH = 32        # max width units per line (16 CJK chars × 2)
 LINES_PER_BOX = 2      # lines per text box
 
 # Variable width estimates

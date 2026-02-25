@@ -84,6 +84,33 @@ _HARDCODED_TRANSLATIONS: dict[str, str] = {
     ),
 }
 
+# Manual translations for trainer classes not in the PokeAPI glossary
+_TRAINER_CLASS_OVERRIDES: dict[str, str] = {
+    "RIVAL": "劲敌",
+}
+
+
+def _strip_llm_newlines(text: str) -> str:
+    """Remove literal newlines inserted by the LLM for formatting.
+
+    After control-code restoration, semantic breaks are already present as
+    real \\n\\n (paragraph) or \\n (semantic newline).  Any *additional*
+    literal newlines were injected by the LLM to wrap its own output and
+    should be removed so that wrap_text() can re-wrap at the correct
+    Chinese line width.
+
+    Strategy: replace single literal newlines (not part of \\n\\n) with
+    empty string (join the text), preserving \\n\\n paragraph breaks.
+    """
+    # Protect \n\n paragraph breaks
+    _PARA = "\x00PARA\x00"
+    text = text.replace("\n\n", _PARA)
+    # Remove remaining single \n (LLM formatting artifacts)
+    text = text.replace("\n", "")
+    # Restore paragraph breaks
+    text = text.replace(_PARA, "\n\n")
+    return text
+
 
 class Pipeline:
     def __init__(
@@ -145,6 +172,10 @@ class Pipeline:
         category = table["category"]
         for entry in table["entries"]:
             original = entry["original"].strip('"')
+            # Check manual overrides for trainer classes
+            if category == "trainer_classes" and original in _TRAINER_CLASS_OVERRIDES:
+                entry["translated"] = _TRAINER_CLASS_OVERRIDES[original]
+                continue
             # Try glossary lookup first
             zh = self.glossary.lookup(original)
             if zh:
@@ -160,7 +191,8 @@ class Pipeline:
                 results = self.translator.translate_batch(
                     [protected], glossary_ctx
                 )
-                translated = restore(results[0], codes)
+                clean = _strip_llm_newlines(results[0])
+                translated = restore(clean, codes)
                 entry["translated"] = translated
             elif zh:
                 # Had a glossary match but with bad chars, use it anyway
@@ -202,7 +234,11 @@ class Pipeline:
 
         # Restore control codes and wrap text
         for i, entry in enumerate(remaining):
-            translated = restore(results[i], codes_list[i])
+            # Strip literal newlines the LLM may have inserted for formatting.
+            # At this point, semantic breaks are still encoded as {C0} etc.,
+            # so any literal newlines are LLM formatting artifacts.
+            clean = _strip_llm_newlines(results[i])
+            translated = restore(clean, codes_list[i])
             entry["translated"] = wrap_text(translated)
 
     def _format_glossary(self, text: str) -> str:

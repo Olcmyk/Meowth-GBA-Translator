@@ -12,6 +12,15 @@ public static class TextPreprocessor
     // 控制码正则：匹配 [xxx] 格式的所有控制码
     private static readonly Regex ControlCodeRegex = new(@"\[([a-zA-Z_][a-zA-Z0-9_]*)\]", RegexOptions.Compiled);
 
+    // GBA 英文文本框宽度（字符数）。行可见长度 >= 此阈值的 75% 视为排版换行。
+    private const int GbaLineWidth = 32;
+    private const int SemanticThreshold = (int)(GbaLineWidth * 0.75); // 24
+
+    // 用于计算可见长度时剥离的不可见控制码
+    private static readonly Regex InvisibleRe = new(
+        @"\\\.[plnr]|\[([a-zA-Z_]\w*)\]",
+        RegexOptions.Compiled);
+
     /// <summary>
     /// 预处理：剥离引号、替换控制码为占位符、处理换行
     /// </summary>
@@ -24,11 +33,13 @@ public static class TextPreprocessor
         if (clean.StartsWith("\"") && clean.EndsWith("\""))
             clean = clean[1..^1];
 
-        // 2. 处理换行符：先保护连续换行（段落分隔），再删除单个换行
+        // 2. 处理换行符：区分语义换行和排版换行
         // \n\n → {PARA}（段落分隔/翻页）
         clean = clean.Replace("\n\n", "{PARA}");
-        // 删除剩余的单个 \n（英文原版的换行是宽度限制，中文需要重新排版）
-        clean = clean.Replace("\n", " ");
+        // 对剩余的单个 \n，判断前一行是否"顶到头了"
+        // 短行（< 75% GBA宽度）后的 \n = 语义换行，保留为 {SEMNL}
+        // 长行后的 \n = 排版换行，替换为空格
+        clean = ClassifyNewlines(clean);
 
         // 3. 提取并替换控制码
         int codeIndex = 0;
@@ -45,28 +56,80 @@ public static class TextPreprocessor
     }
 
     /// <summary>
+    /// 区分语义换行和排版换行。
+    /// 短行（可见长度 < 阈值）后的 \n → {SEMNL}（语义换行，保留）
+    /// 长行后的 \n → 空格（排版换行，去掉）
+    /// </summary>
+    private static string ClassifyNewlines(string text)
+    {
+        // {PARA} 已经替换好了，现在处理剩余的 \n
+        var lines = text.Split('\n');
+        if (lines.Length <= 1) return text;
+
+        var sb = new StringBuilder();
+        for (int i = 0; i < lines.Length; i++)
+        {
+            sb.Append(lines[i]);
+            if (i < lines.Length - 1)
+            {
+                // 计算当前行的可见长度（去掉 {PARA} 和控制码）
+                var cleanLine = lines[i].Replace("{PARA}", "");
+                var visLen = VisibleLength(cleanLine);
+                if (visLen < SemanticThreshold)
+                    sb.Append("{SEMNL}"); // 语义换行
+                else
+                    sb.Append(' '); // 排版换行 → 空格
+            }
+        }
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// 计算一行文本的可见字符长度（剥离控制码）
+    /// </summary>
+    private static int VisibleLength(string line)
+    {
+        var stripped = InvisibleRe.Replace(line, "");
+        return stripped.Length;
+    }
+
+    /// <summary>
     /// 后处理：还原控制码、还原段落分隔、自动换行、加回引号
     /// </summary>
     public static string Postprocess(string translated, Dictionary<string, string> codeMap)
     {
+        // 0. 清除 LLM 可能自行插入的换行（语义换行是 {SEMNL}/{PARA}，其余都是 LLM 产物）
+        var result = translated.Replace("\n", "");
+
         // 1. 还原控制码
-        var result = translated;
         foreach (var (placeholder, original) in codeMap)
         {
             result = result.Replace(placeholder, original);
         }
 
-        // 2. 还原段落分隔
+        // 2. 还原段落分隔和语义换行
         result = result.Replace("{PARA}", "\n\n");
+        result = result.Replace("{SEMNL}", "\n");
 
         // 3. 自动换行（按段落处理）
+        //    每个段落内：先按语义换行拆段，每段 AutoWrap 成多行，
+        //    然后把所有行按 2 行一页分配，用 \n 和 \p。
         var paragraphs = result.Split("\n\n");
         var wrappedParagraphs = new List<string>();
         foreach (var para in paragraphs)
         {
-            wrappedParagraphs.Add(AutoWrap(para));
+            var segments = para.Split('\n');
+            var allLines = new List<string>();
+            foreach (var seg in segments)
+            {
+                // AutoWrap 返回的文本用 \n 分行
+                var wrapped = AutoWrap(seg);
+                allLines.AddRange(wrapped.Split('\n'));
+            }
+            wrappedParagraphs.Add(DistributeLines(allLines, 2));
         }
-        result = string.Join("\n\n", wrappedParagraphs);
+        // 段落之间用 \p 翻页
+        result = string.Join("\\p", wrappedParagraphs);
 
         // 4. 加回引号
         result = $"\"{result}\"";
@@ -75,12 +138,44 @@ public static class TextPreprocessor
     }
 
     /// <summary>
+    /// 把多行文本分配到 GBA 文本框：每 linesPerBox 行一页。
+    /// 页内用 \n，页间用 \p。
+    /// </summary>
+    private static string DistributeLines(List<string> lines, int linesPerBox)
+    {
+        if (lines.Count == 0) return "";
+
+        var sb = new StringBuilder();
+        int lineInBox = 0;
+
+        for (int i = 0; i < lines.Count; i++)
+        {
+            if (i > 0)
+            {
+                if (lineInBox >= linesPerBox)
+                {
+                    sb.Append("\\p");
+                    lineInBox = 0;
+                }
+                else
+                {
+                    sb.Append("\\n");
+                }
+            }
+            sb.Append(lines[i]);
+            lineInBox++;
+        }
+
+        return sb.ToString();
+    }
+
+    /// <summary>
     /// 自动换行：按 16 宽度单位插入 \n
     /// 中文字符宽度=2，英文/数字/符号=1
     /// 控制码宽度按最大值计算（[player]=7 等）
     /// \. 宽度=0
     /// </summary>
-    public static string AutoWrap(string text, int maxWidth = 16)
+    public static string AutoWrap(string text, int maxWidth = 32)
     {
         if (string.IsNullOrEmpty(text)) return text;
 
