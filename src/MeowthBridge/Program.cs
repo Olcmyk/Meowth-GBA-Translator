@@ -29,7 +29,7 @@ public static class Program
     {
         if (args.Length < 2)
         {
-            Console.Error.WriteLine("Usage: MeowthBridge extract <rom.gba>");
+            Console.Error.WriteLine("Usage: MeowthBridge extract <rom.gba> [-o output.json]");
             return 1;
         }
 
@@ -40,7 +40,23 @@ public static class Program
             return 1;
         }
 
-        Directory.CreateDirectory("work");
+        // Parse -o option
+        var outputPath = Path.Combine("work", "texts.json");
+        for (int i = 2; i < args.Length; i++)
+        {
+            if (args[i] == "-o" && i + 1 < args.Length)
+            {
+                outputPath = args[i + 1];
+                break;
+            }
+        }
+
+        // Ensure output directory exists
+        var outputDir = Path.GetDirectoryName(outputPath);
+        if (!string.IsNullOrEmpty(outputDir))
+        {
+            Directory.CreateDirectory(outputDir);
+        }
 
         Console.Error.WriteLine($"Loading ROM: {romPath}");
         var model = await RomLoader.Load(romPath);
@@ -50,7 +66,6 @@ public static class Program
         var extractor = new TextExtractor(model);
         var entries = extractor.ExtractAll();
 
-        var outputPath = Path.Combine("work", "text.json");
         var json = extractor.ToJson(entries);
         File.WriteAllText(outputPath, json);
 
