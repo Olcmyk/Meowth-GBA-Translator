@@ -39,6 +39,7 @@ class RomWriter:
 
     def __init__(self, charmap: Optional[Charmap] = None, game: str = "firered", target_lang: str = "zh-Hans"):
         self.charmap = charmap or Charmap(target_lang=target_lang)
+        self.target_lang = target_lang
         self.FONT_BOUNDARY = self._FONT_BOUNDARIES.get(game, 0x01FD3000)
         self.write_offset = self.EXPANSION_START  # updated in inject()
 
@@ -286,11 +287,14 @@ class RomWriter:
         """Truncate encoded text to fit max length, ensuring valid termination.
 
         Respects multi-byte boundaries for:
-        - Font patch Chinese chars (high bytes 0x01-0x1E excl 0x06/0x1B)
+        - Font patch Chinese chars (high bytes 0x01-0x1E excl 0x06/0x1B) — CJK only
         - FC/FD control codes with argument bytes
         """
         if len(encoded) <= max_length:
             return encoded
+
+        from .languages import is_cjk_language
+        is_cjk = is_cjk_language(self.target_lang)
 
         # Walk through encoded bytes respecting multi-byte boundaries
         i = 0
@@ -298,8 +302,8 @@ class RomWriter:
             b = encoded[i]
             if b == 0xFF:
                 break
-            # Font patch 2-byte Chinese character
-            if b in self._CHINESE_HIGH_BYTES:
+            # Font patch 2-byte Chinese character (only for CJK languages)
+            if is_cjk and b in self._CHINESE_HIGH_BYTES:
                 if i + 2 > max_length - 1:
                     break  # not enough room for this char + terminator
                 i += 2

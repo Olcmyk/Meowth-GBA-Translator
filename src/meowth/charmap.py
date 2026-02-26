@@ -2,9 +2,9 @@
 
 from pathlib import Path
 
-from .languages import postprocess_for_language
+from .languages import is_latin_language, postprocess_for_language
 
-# Default charmap path
+# Default charmap path (Chinese font patch)
 DEFAULT_CHARMAP = Path(__file__).parent.parent.parent / "Pokemon_GBA_Font_Patch" / "pokeFRLG" / "PMRSEFRLG_charmap.txt"
 
 
@@ -13,7 +13,10 @@ class Charmap:
         self.char_to_bytes: dict[str, bytes] = {}
         self.bytes_to_char: dict[int, str] = {}
         self.target_lang = target_lang
-        self._parse(charmap_path)
+        if is_latin_language(target_lang):
+            self._build_from_pcs()
+        else:
+            self._parse(charmap_path)
 
     def _parse(self, path: Path):
         for line in path.read_text(encoding="utf-8").splitlines():
@@ -37,6 +40,20 @@ class Charmap:
                 lo = hex_val & 0xFF
                 self.char_to_bytes[char_part] = bytes([hi, lo])
                 self.bytes_to_char[hex_val] = char_part
+
+    def _build_from_pcs(self):
+        """Build charmap from the standard PCS character table (for Latin languages).
+
+        Latin target languages don't use the Chinese font patch, so the ROM
+        retains the original GBA PCS encoding.  We must encode using the same
+        table the unpatched ROM expects.
+        """
+        from .pcs_codes import PCS_CHAR_TABLE
+
+        for byte_val, char in PCS_CHAR_TABLE.items():
+            if char:  # skip empty entries
+                self.char_to_bytes[char] = bytes([byte_val])
+                self.bytes_to_char[byte_val] = char
 
     def encode_char(self, ch: str) -> bytes | None:
         """Encode a single character to Font Patch bytes."""

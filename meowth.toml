@@ -1,11 +1,18 @@
 [translation]
+# LLM provider preset. Supported: deepseek, openai, google, groq, mistral,
+# openrouter, siliconflow, zhipu, moonshot, qwen, anthropic
+# Each preset auto-configures base_url, default model, and API key env var.
 provider = "deepseek"
 model = "deepseek-chat"
 source_language = "en"
 target_language = "zh-Hans"
 
 [translation.api]
+# Environment variable that holds the API key.
+# Set the actual key in .env or your shell: export DEEPSEEK_API_KEY=sk-xxx
 key_env = "DEEPSEEK_API_KEY"
+# Uncomment to use a custom OpenAI-compatible endpoint:
+# base_url = "https://api.deepseek.com/v1"
 
 [font_patch]
 armips_path = "tools/armips"

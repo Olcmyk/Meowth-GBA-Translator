@@ -168,12 +168,20 @@ class Pipeline:
         game: str = "firered",
         source_lang: str = "en",
         target_lang: str = "zh-Hans",
+        provider: str | None = None,
+        api_base: str | None = None,
+        api_key_env: str | None = None,
+        model: str | None = None,
     ):
         self.source_lang = source_lang
         self.target_lang = target_lang
         self.charmap = charmap or Charmap(target_lang=target_lang)
         self.glossary = glossary or Glossary(source_lang=source_lang, target_lang=target_lang)
-        self.translator = translator or Translator(source_lang=source_lang, target_lang=target_lang)
+        self.translator = translator or Translator(
+            source_lang=source_lang, target_lang=target_lang,
+            provider=provider, base_url=api_base,
+            api_key_env=api_key_env, model=model,
+        )
         self.game = game
 
     def translate_texts(

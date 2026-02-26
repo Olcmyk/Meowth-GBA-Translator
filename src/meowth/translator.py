@@ -1,4 +1,4 @@
-"""DeepSeek translation with local caching."""
+"""LLM translation with local caching. Supports any OpenAI-compatible API."""
 
 import hashlib
 import json
@@ -12,6 +12,21 @@ import httpx
 from .languages import get_language_name, get_language_name_zh
 
 DEFAULT_CACHE_DIR = Path(__file__).parent.parent.parent / "work" / "cache"
+
+# Well-known provider presets: provider_name -> (base_url, default_model, env_var)
+PROVIDER_PRESETS: dict[str, tuple[str, str, str]] = {
+    "deepseek":  ("https://api.deepseek.com/v1",              "deepseek-chat",     "DEEPSEEK_API_KEY"),
+    "openai":    ("https://api.openai.com/v1",                 "gpt-4o",            "OPENAI_API_KEY"),
+    "anthropic": ("https://api.anthropic.com/v1",              "claude-sonnet-4-20250514", "ANTHROPIC_API_KEY"),
+    "google":    ("https://generativelanguage.googleapis.com/v1beta/openai", "gemini-2.0-flash", "GOOGLE_API_KEY"),
+    "groq":      ("https://api.groq.com/openai/v1",           "llama-3.3-70b-versatile", "GROQ_API_KEY"),
+    "mistral":   ("https://api.mistral.ai/v1",                "mistral-large-latest", "MISTRAL_API_KEY"),
+    "openrouter":("https://openrouter.ai/api/v1",             "openai/gpt-4o",     "OPENROUTER_API_KEY"),
+    "siliconflow":("https://api.siliconflow.cn/v1",           "deepseek-ai/DeepSeek-V3", "SILICONFLOW_API_KEY"),
+    "zhipu":     ("https://open.bigmodel.cn/api/paas/v4",     "glm-4-flash",       "ZHIPU_API_KEY"),
+    "moonshot":  ("https://api.moonshot.cn/v1",               "moonshot-v1-8k",    "MOONSHOT_API_KEY"),
+    "qwen":      ("https://dashscope.aliyuncs.com/compatible-mode/v1", "qwen-plus", "DASHSCOPE_API_KEY"),
+}
 
 # Language-specific prompt templates
 PROMPT_TEMPLATES = {
@@ -80,16 +95,29 @@ class Translator:
     def __init__(
         self,
         api_key: str | None = None,
-        model: str = "deepseek-chat",
+        model: str | None = None,
         cache_dir: Path = DEFAULT_CACHE_DIR,
         source_lang: str = "en",
         target_lang: str = "zh-Hans",
+        base_url: str | None = None,
+        api_key_env: str | None = None,
+        provider: str | None = None,
     ):
-        self.api_key = api_key or os.environ.get("DEEPSEEK_API_KEY", "")
-        self.model = model
+        # Resolve provider preset
+        if provider and provider in PROVIDER_PRESETS:
+            preset_url, preset_model, preset_env = PROVIDER_PRESETS[provider]
+            base_url = base_url or preset_url
+            model = model or preset_model
+            api_key_env = api_key_env or preset_env
+
+        # Defaults (backward compatible with DeepSeek)
+        self.base_url = base_url or "https://api.deepseek.com/v1"
+        self.model = model or "deepseek-chat"
+        env_var = api_key_env or "DEEPSEEK_API_KEY"
+        self.api_key = api_key or os.environ.get(env_var, "")
+
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
-        self.base_url = "https://api.deepseek.com/v1"
         self._cache_lock = threading.Lock()
         self.source_lang = source_lang
         self.target_lang = target_lang
