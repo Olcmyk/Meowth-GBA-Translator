@@ -15,6 +15,7 @@ TERM_FILES = {
     "items": ("item_names.csv", "item_id"),
     "types": ("type_names.csv", "type_id"),
     "natures": ("nature_names.csv", "nature_id"),
+    "locations": ("location_names.csv", "location_id"),
 }
 
 

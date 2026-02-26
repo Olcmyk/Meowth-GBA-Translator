@@ -9,7 +9,6 @@ key_env = "MEOWTH_API_KEY"
 
 [font_patch]
 armips_path = "tools/armips"
-game = "E"
 
 [output]
 dir = "outputs"

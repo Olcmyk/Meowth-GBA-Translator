@@ -97,6 +97,11 @@ class Charmap:
         "\u3001": ",",    # 、 → ,
         "\uFF5E": "~",    # ～ fullwidth tilde
         "\u00B7": ".",    # middle dot
+        "\u202F": " ",    # narrow no-break space → regular space
+        "\u0152": "OE",   # Œ → OE
+        "\u0153": "oe",   # œ → oe
+        "\"": "",         # double quote → strip (will be stripped by rom_writer)
+        "'": "",          # single quote → strip
         "$": "",          # dollar sign (not in charmap, strip)
     }
 
