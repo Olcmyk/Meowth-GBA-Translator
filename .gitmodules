@@ -1,0 +1,16 @@
+[submodule "HexManiacAdvance"]
+	path = HexManiacAdvance
+	url = https://github.com/Olcmyk/HexManiacAdvance.git
+	branch = meowth-patches
+[submodule "Pokemon_GBA_Font_Patch"]
+	path = Pokemon_GBA_Font_Patch
+	url = https://github.com/Olcmyk/Pokemon_GBA_Font_Patch.git
+	branch = meowth-patches
+[submodule "armips"]
+	path = armips
+	url = https://github.com/Olcmyk/armips.git
+	branch = master
+[submodule "pokeapi"]
+	path = pokeapi
+	url = https://github.com/Olcmyk/pokeapi.git
+	branch = master

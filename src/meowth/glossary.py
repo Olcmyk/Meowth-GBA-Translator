@@ -5,7 +5,7 @@ from pathlib import Path
 
 from .languages import SUPPORTED_LANGUAGES
 
-POKEAPI_DIR = Path(__file__).parent.parent.parent / "pokeapi-master" / "data" / "v2" / "csv"
+POKEAPI_DIR = Path(__file__).parent.parent.parent / "pokeapi" / "data" / "v2" / "csv"
 
 # CSV files and their name column
 TERM_FILES = {

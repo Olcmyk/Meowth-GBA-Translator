@@ -23,8 +23,6 @@ obj/
 # ROM files (large binaries)
 *.gba
 *.sav
-firered_cn.gba
-firered_cn.sav
 
 # IDE
 .vscode/
@@ -40,8 +38,13 @@ resources/
 work/*
 !work/.gitkeep
 
-# External repos / build artifacts
-HexManiacAdvance/
-Pokemon_GBA_Font_Patch/
-armips-build/
+# Build tools (platform-specific binaries)
+tools/
+
+# Temporary / working files
+hma_workdir/
+*.json
+!pyproject.toml
+
+# Serena
 .serena/
