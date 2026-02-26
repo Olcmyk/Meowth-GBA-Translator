@@ -1,15 +1,15 @@
 [translation]
-provider = "deepseek"
 model = "deepseek-chat"
 source_language = "en"
 target_language = "zh-Hans"
 
 [translation.api]
-key_env = "DEEPSEEK_API_KEY"
+base_url = "https://api.deepseek.com/v1"
+key_env = "MEOWTH_API_KEY"
 
 [font_patch]
 armips_path = "tools/armips"
-game = "FR"
+game = "E"
 
 [output]
 dir = "outputs"

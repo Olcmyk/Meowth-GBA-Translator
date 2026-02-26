@@ -10,6 +10,7 @@ from .charmap import Charmap
 from .control_codes import protect, restore
 from .font_patch import apply_font_patch
 from .glossary import Glossary
+from .languages import is_cjk_language
 from .pcs_codes import FD_MACROS
 from .rom_writer import RomWriter
 from .text_wrap import wrap_text
@@ -165,11 +166,16 @@ class Pipeline:
         glossary: Glossary | None = None,
         translator: Translator | None = None,
         game: str = "firered",
+        source_lang: str = "en",
+        target_lang: str = "zh-Hans",
     ):
         self.charmap = charmap or Charmap()
-        self.glossary = glossary or Glossary()
-        self.translator = translator or Translator()
+        self.source_lang = source_lang
+        self.target_lang = target_lang
+        self.glossary = glossary or Glossary(source_lang=source_lang, target_lang=target_lang)
+        self.translator = translator or Translator(source_lang=source_lang, target_lang=target_lang)
         self.game = game
+        self.needs_font_patch = is_cjk_language(target_lang)
 
     def translate_texts(
         self, texts_path: Path, output_path: Path, batch_size: int = 30,
@@ -220,8 +226,13 @@ class Pipeline:
         category = table["category"]
         for entry in table["entries"]:
             original = entry["original"].strip('"')
-            # Check manual overrides for trainer classes
-            if category == "trainer_classes" and original in _TRAINER_CLASS_OVERRIDES:
+            # Check manual overrides for trainer classes (zh-Hans + firered only)
+            if (
+                self.target_lang == "zh-Hans"
+                and self.game == "firered"
+                and category == "trainer_classes"
+                and original in _TRAINER_CLASS_OVERRIDES
+            ):
                 entry["translated"] = _TRAINER_CLASS_OVERRIDES[original]
                 continue
             # Try glossary lookup first
@@ -251,11 +262,15 @@ class Pipeline:
 
     def _translate_free_batch(self, batch: list[dict]):
         """Translate a batch of free text entries via LLM."""
-        # Apply hardcoded overrides first (FireRed only)
+        # Apply hardcoded overrides first (FireRed + zh-Hans only)
         remaining = []
         for entry in batch:
             entry_id = entry.get("id", "")
-            if self.game == "firered" and entry_id in _HARDCODED_TRANSLATIONS:
+            if (
+                self.target_lang == "zh-Hans"
+                and self.game == "firered"
+                and entry_id in _HARDCODED_TRANSLATIONS
+            ):
                 entry["translated"] = _HARDCODED_TRANSLATIONS[entry_id]
             else:
                 remaining.append(entry)
@@ -319,14 +334,17 @@ class Pipeline:
         rom = writer.expand_rom(rom)
         print(f"  ROM expanded to {len(rom) // (1024*1024)}MB")
 
-        # 2. Apply font patch
-        print("  Applying font patch...")
-        temp_rom = output_path.parent / "temp_fontpatch.gba"
-        writer.save_rom(rom, temp_rom)
-        apply_font_patch(temp_rom, temp_rom, game=self.game)
-        rom = writer.load_rom(temp_rom)
-        temp_rom.unlink(missing_ok=True)
-        print("  Font patch applied")
+        # 2. Apply font patch (CJK targets only)
+        if self.needs_font_patch:
+            print("  Applying font patch...")
+            temp_rom = output_path.parent / "temp_fontpatch.gba"
+            writer.save_rom(rom, temp_rom)
+            apply_font_patch(temp_rom, temp_rom, game=self.game)
+            rom = writer.load_rom(temp_rom)
+            temp_rom.unlink(missing_ok=True)
+            print("  Font patch applied")
+        else:
+            print("  Skipping font patch (Latin target language)")
 
         # 3. Collect all entries for injection
         all_entries = []
@@ -338,8 +356,8 @@ class Pipeline:
             if "translated" in entry:
                 all_entries.append(entry)
 
-        # 3b. Load manual entries (FireRed-specific, not applicable to other games)
-        if self.game == "firered":
+        # 3b. Load manual entries (FireRed zh-Hans only)
+        if self.game == "firered" and self.target_lang == "zh-Hans":
             manual_path = Path(__file__).parent / "manual_entries.json"
             if manual_path.exists():
                 manual = json.loads(manual_path.read_text(encoding="utf-8"))
@@ -414,10 +432,11 @@ class Pipeline:
             print(f"Warning: could not detect game from ROM header, using: {self.game}")
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        lang_suffix = self.target_lang.replace("-", "")
 
         texts_path = work_dir / "texts.json"
         translated_path = work_dir / "texts_translated.json"
-        output_path = output_dir / f"{self.game}_cn_{timestamp}.gba"
+        output_path = output_dir / f"{self.game}_{lang_suffix}_{timestamp}.gba"
 
         print("[1/3] Extracting texts from ROM...")
         self.extract_texts(rom_path, texts_path)

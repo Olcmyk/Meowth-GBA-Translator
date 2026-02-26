@@ -15,14 +15,18 @@ if env_path.exists():
             os.environ[k.strip()] = v.strip()
 
 from meowth.charmap import Charmap
+from meowth.config import load_config
 from meowth.control_codes import protect, restore
 from meowth.glossary import Glossary
+from meowth.languages import is_cjk_language
 from meowth.rom_writer import RomWriter
 from meowth.translator import Translator
 from meowth.pipeline import _HARDCODED_TRANSLATIONS, detect_game
 
+# ---- Config ----
+cfg = load_config()
+
 # ---- Game detection ----
-# Accept ROM path as first argument, or default to firered
 if len(sys.argv) > 1:
     ROM_PATH = Path(sys.argv[1])
 else:
@@ -36,17 +40,11 @@ else:
     print(f"Detected game: {game}")
 
 # Per-game output paths
-_OUTPUT_NAMES: dict[str, str] = {
-    "firered": "firered_cn.gba",
-    "leafgreen": "leafgreen_cn.gba",
-    "emerald": "emerald_cn.gba",
-    "ruby": "ruby_cn.gba",
-    "sapphire": "sapphire_cn.gba",
-}
+lang_suffix = cfg.target_language.replace("-", "")
 
 TEXTS_PATH = Path("work/texts.json")
 TRANSLATED_PATH = Path("work/texts_translated.json")
-OUTPUT_PATH = Path("outputs") / _OUTPUT_NAMES.get(game, f"{game}_cn.gba")
+OUTPUT_PATH = Path("outputs") / f"{game}_{lang_suffix}.gba"
 
 # ---- Step 1: Convert MeowthBridge format to tables + free_texts ----
 print("=" * 60)
@@ -78,8 +76,14 @@ print(f"  自由文本: {len(free_texts)} 条")
 print("=" * 60)
 print("[2/3] 翻译文本...")
 
-glossary = Glossary()
-translator = Translator()
+glossary = Glossary(source_lang=cfg.source_language, target_lang=cfg.target_language)
+translator = Translator(
+    api_key=cfg.api_key,
+    model=cfg.model,
+    base_url=cfg.base_url,
+    source_lang=cfg.source_language,
+    target_lang=cfg.target_language,
+)
 charmap = Charmap()
 
 # 2a. Translate table entries (glossary first, then LLM for descriptions)
@@ -87,11 +91,11 @@ for table in tables:
     cat = table["category"]
     for entry in table["entries"]:
         original = entry["original"].strip('"')
-        zh = glossary.lookup(original)
-        if zh:
-            ok, _ = charmap.can_encode(zh)
+        tgt = glossary.lookup(original)
+        if tgt:
+            ok, _ = charmap.can_encode(tgt)
             if ok:
-                entry["translated"] = zh
+                entry["translated"] = tgt
                 continue
         # Keep original for short names (no LLM needed)
         entry["translated"] = original
@@ -101,14 +105,16 @@ for table in tables:
 # 2b. Translate free texts in batches
 BATCH_SIZE = 30
 total = len(free_texts)
+use_hardcoded = cfg.target_language == "zh-Hans" and game == "firered"
+
 for i in range(0, total, BATCH_SIZE):
     batch = free_texts[i:i + BATCH_SIZE]
 
-    # Check hardcoded overrides first (FireRed only)
+    # Check hardcoded overrides first (FireRed + zh-Hans only)
     remaining = []
     for entry in batch:
         eid = entry.get("id", "")
-        if game == "firered" and eid in _HARDCODED_TRANSLATIONS:
+        if use_hardcoded and eid in _HARDCODED_TRANSLATIONS:
             entry["translated"] = _HARDCODED_TRANSLATIONS[eid]
         else:
             remaining.append(entry)
@@ -130,7 +136,7 @@ for i in range(0, total, BATCH_SIZE):
     # Glossary context
     all_text = " ".join(originals)
     terms = glossary.get_context_terms(all_text)
-    glossary_ctx = "\n".join(f"  {en} = {zh}" for en, zh in terms.items()) if terms else ""
+    glossary_ctx = "\n".join(f"  {src} = {tgt}" for src, tgt in terms.items()) if terms else ""
 
     # Translate
     results = translator.translate_batch(protected_list, glossary_ctx)
@@ -171,7 +177,7 @@ rom = writer.load_rom(ROM_PATH)
 rom = writer.expand_rom(rom)
 print(f"  ROM 扩展到 {len(rom) // (1024*1024)}MB")
 
-overrides = _HARDCODED_TRANSLATIONS if game == "firered" else None
+overrides = _HARDCODED_TRANSLATIONS if use_hardcoded else None
 rom, stats = writer.inject_texts(rom, all_entries, overrides=overrides)
 print(f"  写入: {stats['in_place']} in-place, {stats['relocated']} relocated, "
       f"{stats['skipped']} skipped, {stats['errors']} errors")
