@@ -9,9 +9,14 @@ from pathlib import Path
 
 import httpx
 
+from .languages import get_language_name
+
 DEFAULT_CACHE_DIR = Path(__file__).parent.parent.parent / "work" / "cache"
 
-SYSTEM_PROMPT = """你是一个专业的宝可梦游戏本地化翻译专家。请将以下宝可梦游戏的英文文本翻译成简体中文。
+# Language-specific prompt templates
+PROMPT_TEMPLATES = {
+    "zh-Hans": {
+        "system": """你是一个专业的宝可梦游戏本地化翻译专家。请将以下宝可梦游戏的英文文本翻译成简体中文。
 
 核心规则：
 1. 控制码占位符（如 {{C0}}, {{C1}} 等）必须原样保留，不得修改、删除或增加
@@ -34,13 +39,41 @@ SYSTEM_PROMPT = """你是一个专业的宝可梦游戏本地化翻译专家。�
 重要：你必须将所有英文内容翻译成中文。不要原样返回英文文本。即使是地名、专有名词也要翻译或音译。
 
 术语表：
-{glossary}"""
-
-USER_PROMPT = """请将以下宝可梦游戏文本从英文翻译成简体中文。
+{glossary}""",
+        "user": """请将以下宝可梦游戏文本从英文翻译成简体中文。
 每条文本用 ||| 分隔，请按相同顺序返回翻译结果，也用 ||| 分隔。
 不要添加编号或额外说明，只返回翻译后的文本。
 
-{texts}"""
+{texts}""",
+    },
+    "generic": {
+        "system": """You are a professional Pokemon game localization expert. Translate the following Pokemon game text from {source_lang} to {target_lang}.
+
+Core rules:
+1. Control code placeholders (like {{C0}}, {{C1}}, etc.) MUST be preserved exactly - do not modify, delete, or add any
+   - These are game control codes (line breaks, page breaks, colors, etc.) and changing them will crash the game
+2. The number and order of placeholders must match the original text exactly
+3. Use official Pokemon terminology from the glossary provided
+4. Maintain the natural conversational style of game dialogue
+5. For proper nouns (character names, place names), use official translations if available in the glossary, otherwise transliterate
+6. Return only the translation, no explanations or notes
+7. If the input contains no translatable content (pure symbols or gibberish), return it unchanged
+8. Do not insert any line breaks in your translation - output plain text, the system will handle formatting
+9. Preserve all \\. pause markers, they represent in-game pauses
+10. Preserve paragraph breaks (blank lines), they represent page breaks in the game
+
+Important: Placeholders represent variables that will be replaced at runtime (player name, rival name, etc.). Do not replace words like "rival" with specific names.
+- For example, "your rival {{C0}}" should be translated preserving the word "rival" in {target_lang}, not replaced with a specific character name
+
+Terminology glossary:
+{glossary}""",
+        "user": """Translate the following Pokemon game text from {source_lang} to {target_lang}.
+Each text is separated by |||. Return translations in the same order, also separated by |||.
+Do not add numbering or extra explanations, only return the translated text.
+
+{texts}""",
+    },
+}
 
 
 class Translator:
@@ -49,6 +82,8 @@ class Translator:
         api_key: str | None = None,
         model: str = "deepseek-chat",
         cache_dir: Path = DEFAULT_CACHE_DIR,
+        source_lang: str = "en",
+        target_lang: str = "zh-Hans",
     ):
         self.api_key = api_key or os.environ.get("DEEPSEEK_API_KEY", "")
         self.model = model
@@ -56,6 +91,22 @@ class Translator:
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.base_url = "https://api.deepseek.com/v1"
         self._cache_lock = threading.Lock()
+        self.source_lang = source_lang
+        self.target_lang = target_lang
+
+        # Select appropriate prompt template
+        if target_lang in PROMPT_TEMPLATES:
+            self.prompts = PROMPT_TEMPLATES[target_lang]
+        else:
+            # Use generic template with language names
+            self.prompts = {
+                "system": PROMPT_TEMPLATES["generic"]["system"].replace(
+                    "{source_lang}", get_language_name(source_lang)
+                ).replace("{target_lang}", get_language_name(target_lang)),
+                "user": PROMPT_TEMPLATES["generic"]["user"].replace(
+                    "{source_lang}", get_language_name(source_lang)
+                ).replace("{target_lang}", get_language_name(target_lang)),
+            }
 
     def _cache_key(self, request_data: dict) -> str:
         content = json.dumps(request_data, sort_keys=True, ensure_ascii=False)
@@ -91,8 +142,8 @@ class Translator:
         each text individually to avoid misalignment.
         """
         joined = " ||| ".join(texts)
-        system = SYSTEM_PROMPT.replace("{glossary}", glossary_context or "（无）")
-        user = USER_PROMPT.replace("{texts}", joined)
+        system = self.prompts["system"].replace("{glossary}", glossary_context or "（无）")
+        user = self.prompts["user"].replace("{texts}", joined)
 
         request_data = {
             "model": self.model,
@@ -165,10 +216,15 @@ class Translator:
         self, texts: list[str], glossary_context: str = ""
     ) -> list[str]:
         """Translate texts one by one as fallback when batch splitting fails."""
-        system = SYSTEM_PROMPT.replace("{glossary}", glossary_context or "（无）")
+        system = self.prompts["system"].replace("{glossary}", glossary_context or "（无）")
         results = []
         for text in texts:
-            user = f"请将以下宝可梦游戏文本从英文翻译成简体中文。\n\n{text}"
+            # Use the appropriate user prompt for single text
+            if self.target_lang == "zh-Hans":
+                user = f"请将以下宝可梦游戏文本从英文翻译成简体中文。\n\n{text}"
+            else:
+                user = f"Translate the following Pokemon game text from {get_language_name(self.source_lang)} to {get_language_name(self.target_lang)}.\n\n{text}"
+
             request_data = {
                 "model": self.model,
                 "system": system,
@@ -186,8 +242,7 @@ class Translator:
             results.append(content)
         return results
 
-    @staticmethod
-    def _translation_unchanged(original: str, translated: str) -> bool:
+    def _translation_unchanged(self, original: str, translated: str) -> bool:
         """Check if the API returned text essentially unchanged (not translated)."""
         orig_norm = original.strip().lower()
         trans_norm = translated.strip().lower()
@@ -195,13 +250,18 @@ class Translator:
         if orig_norm == trans_norm:
             return True
 
-        # Check if the translated text still has mostly ASCII letters
-        # (meaning it wasn't really translated to Chinese)
-        ascii_letters = sum(1 for c in translated if c.isascii() and c.isalpha())
-        chinese_chars = sum(1 for c in translated if "\u4e00" <= c <= "\u9fff")
-        total = ascii_letters + chinese_chars
-        if total > 0 and ascii_letters / total > 0.8:
-            return True
+        # For CJK target languages, check if translation actually contains CJK characters
+        from .languages import is_cjk_language
+        if is_cjk_language(self.target_lang):
+            # Check if the translated text still has mostly ASCII letters
+            # (meaning it wasn't really translated to Chinese/Japanese/Korean)
+            ascii_letters = sum(1 for c in translated if c.isascii() and c.isalpha())
+            chinese_chars = sum(1 for c in translated if "\u4e00" <= c <= "\u9fff")
+            total = ascii_letters + chinese_chars
+            if total > 0 and ascii_letters / total > 0.8:
+                return True
 
+        # For Latin-to-Latin translations, we can't use character set detection
+        # Just check if the text is exactly the same
         return False
 

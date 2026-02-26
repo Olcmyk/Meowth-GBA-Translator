@@ -10,6 +10,7 @@ from .charmap import Charmap
 from .control_codes import protect, restore
 from .font_patch import apply_font_patch
 from .glossary import Glossary
+from .languages import is_cjk_language
 from .pcs_codes import FD_MACROS
 from .rom_writer import RomWriter
 from .text_wrap import wrap_text
@@ -165,10 +166,14 @@ class Pipeline:
         glossary: Glossary | None = None,
         translator: Translator | None = None,
         game: str = "firered",
+        source_lang: str = "en",
+        target_lang: str = "zh-Hans",
     ):
-        self.charmap = charmap or Charmap()
-        self.glossary = glossary or Glossary()
-        self.translator = translator or Translator()
+        self.source_lang = source_lang
+        self.target_lang = target_lang
+        self.charmap = charmap or Charmap(target_lang=target_lang)
+        self.glossary = glossary or Glossary(source_lang=source_lang, target_lang=target_lang)
+        self.translator = translator or Translator(source_lang=source_lang, target_lang=target_lang)
         self.game = game
 
     def translate_texts(
@@ -287,7 +292,7 @@ class Pipeline:
             # so any literal newlines are LLM formatting artifacts.
             clean = _strip_llm_newlines(results[i])
             translated = restore(clean, codes_list[i])
-            entry["translated"] = wrap_text(translated)
+            entry["translated"] = wrap_text(translated, target_lang=self.target_lang)
 
     def _format_glossary(self, text: str) -> str:
         terms = self.glossary.get_context_terms(text)
@@ -311,7 +316,7 @@ class Pipeline:
         data = json.loads(translations_path.read_text(encoding="utf-8"))
         data = convert_format(data)
 
-        writer = RomWriter(self.charmap, game=self.game)
+        writer = RomWriter(self.charmap, game=self.game, target_lang=self.target_lang)
 
         # 1. Load and expand ROM
         print("  Loading ROM...")
@@ -319,14 +324,17 @@ class Pipeline:
         rom = writer.expand_rom(rom)
         print(f"  ROM expanded to {len(rom) // (1024*1024)}MB")
 
-        # 2. Apply font patch
-        print("  Applying font patch...")
-        temp_rom = output_path.parent / "temp_fontpatch.gba"
-        writer.save_rom(rom, temp_rom)
-        apply_font_patch(temp_rom, temp_rom, game=self.game)
-        rom = writer.load_rom(temp_rom)
-        temp_rom.unlink(missing_ok=True)
-        print("  Font patch applied")
+        # 2. Apply font patch (only for CJK languages)
+        if is_cjk_language(self.target_lang):
+            print("  Applying font patch...")
+            temp_rom = output_path.parent / "temp_fontpatch.gba"
+            writer.save_rom(rom, temp_rom)
+            apply_font_patch(temp_rom, temp_rom, game=self.game)
+            rom = writer.load_rom(temp_rom)
+            temp_rom.unlink(missing_ok=True)
+            print("  Font patch applied")
+        else:
+            print(f"  Skipping font patch for Latin language ({self.target_lang})")
 
         # 3. Collect all entries for injection
         all_entries = []

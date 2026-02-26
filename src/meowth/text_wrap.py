@@ -15,6 +15,8 @@ Three-level break handling:
 
 import re
 
+from .languages import is_cjk_language
+
 LINE_WIDTH = 32        # max width units per line (16 CJK chars × 2)
 LINES_PER_BOX = 2      # lines per text box
 
@@ -61,18 +63,28 @@ _TOKEN_RE = re.compile(
 
 
 def wrap_text(text: str, line_width: int = LINE_WIDTH,
-              lines_per_box: int = LINES_PER_BOX) -> str:
+              lines_per_box: int = LINES_PER_BOX, target_lang: str = "zh-Hans") -> str:
     """Wrap translated text to fit GBA text boxes.
 
     Handles three levels of breaks from the input:
     - \\n\\n (or \\p, \\.) = paragraph break → always emits \\p
     - \\n (single) = semantic newline → forced line break within text flow
     - continuous text = auto-wrapped at line_width
+
+    For Latin languages, skip aggressive CJK-specific wrapping logic.
     """
     if not text:
         return text
 
     text = text.replace("\r\n", "\n").replace("\r", "\n")
+
+    # For Latin languages, use simpler wrapping (text is more compact)
+    if not is_cjk_language(target_lang):
+        # Just normalize line breaks and preserve structure
+        text = text.replace("\\.", "\\p")
+        text = text.replace("\n\n", "\\p")
+        # Keep single newlines as-is for Latin text
+        return text
 
     # Step 1: Split on paragraph breaks (\\p, \\., \\n\\n)
     _PARA = "\x00PARA\x00"

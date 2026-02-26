@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from typing import Optional
 
-from .charmap import Charmap, get_default_charmap
+from .charmap import Charmap
 from .pcs_scanner import is_real_text
 
 
@@ -37,8 +37,8 @@ class RomWriter:
     # Minimum contiguous free block required (bytes)
     _MIN_FREE_BLOCK = 512 * 1024  # 512 KB
 
-    def __init__(self, charmap: Optional[Charmap] = None, game: str = "firered"):
-        self.charmap = charmap or get_default_charmap()
+    def __init__(self, charmap: Optional[Charmap] = None, game: str = "firered", target_lang: str = "zh-Hans"):
+        self.charmap = charmap or Charmap(target_lang=target_lang)
         self.FONT_BOUNDARY = self._FONT_BOUNDARIES.get(game, 0x01FD3000)
         self.write_offset = self.EXPANSION_START  # updated in inject()
 

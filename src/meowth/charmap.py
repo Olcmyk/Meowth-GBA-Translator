@@ -2,14 +2,17 @@
 
 from pathlib import Path
 
+from .languages import postprocess_for_language
+
 # Default charmap path
 DEFAULT_CHARMAP = Path(__file__).parent.parent.parent / "Pokemon_GBA_Font_Patch" / "pokeFRLG" / "PMRSEFRLG_charmap.txt"
 
 
 class Charmap:
-    def __init__(self, charmap_path: Path = DEFAULT_CHARMAP):
+    def __init__(self, charmap_path: Path = DEFAULT_CHARMAP, target_lang: str = "zh-Hans"):
         self.char_to_bytes: dict[str, bytes] = {}
         self.bytes_to_char: dict[int, str] = {}
+        self.target_lang = target_lang
         self._parse(charmap_path)
 
     def _parse(self, path: Path):
@@ -102,6 +105,9 @@ class Charmap:
 
     def _sanitize(self, text: str) -> str:
         """Normalize characters that aren't in the charmap to safe alternatives."""
+        # Apply language-specific character replacements first
+        text = postprocess_for_language(text, self.target_lang)
+
         # Fullwidth → halfwidth
         text = text.translate(self._FULLWIDTH_MAP)
         # Character replacements

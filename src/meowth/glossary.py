@@ -3,12 +3,9 @@
 import csv
 from pathlib import Path
 
-POKEAPI_DIR = Path(__file__).parent.parent.parent / "pokeapi-master" / "data" / "v2" / "csv"
+from .languages import SUPPORTED_LANGUAGES
 
-# PokeAPI language IDs
-LANG_EN = 9
-LANG_ZH_HANS = 12  # Simplified Chinese
-LANG_ZH_HANT = 4   # Traditional Chinese (fallback)
+POKEAPI_DIR = Path(__file__).parent.parent.parent / "pokeapi-master" / "data" / "v2" / "csv"
 
 # CSV files and their name column
 TERM_FILES = {
@@ -22,15 +19,26 @@ TERM_FILES = {
 
 
 class Glossary:
-    def __init__(self, pokeapi_dir: Path = POKEAPI_DIR):
-        self.en_to_zh: dict[str, str] = {}
-        # Separate index for context matching: uppercase key → (original_en, zh)
+    def __init__(
+        self,
+        pokeapi_dir: Path = POKEAPI_DIR,
+        source_lang: str = "en",
+        target_lang: str = "zh-Hans",
+    ):
+        self.source_lang = source_lang
+        self.target_lang = target_lang
+        self.source_id = SUPPORTED_LANGUAGES[source_lang]["pokeapi_id"]
+        self.target_id = SUPPORTED_LANGUAGES[target_lang]["pokeapi_id"]
+
+        self.source_to_target: dict[str, str] = {}
+        # Separate index for context matching: uppercase key → (original_source, target)
         self._upper_index: dict[str, tuple[str, str]] = {}
         # Compact key index: uppercase with spaces/hyphens stripped
         # Handles GBA's 13-char move names like THUNDERPUNCH → Thunder Punch
         self._compact_index: dict[str, str] = {}
+
         # Try loading from pre-built JSON first, fall back to CSV
-        json_path = Path(__file__).parent.parent.parent / "resources" / "glossary.json"
+        json_path = Path(__file__).parent.parent.parent / "resources" / f"glossary_{source_lang}_{target_lang}.json"
         if json_path.exists():
             self._load_json(json_path)
         else:
@@ -40,12 +48,12 @@ class Glossary:
         """Load glossary from pre-built JSON file."""
         import json
         data = json.loads(path.read_text(encoding="utf-8"))
-        self.en_to_zh = data.get("en_to_zh", {})
+        self.source_to_target = data.get("source_to_target", {})
         # Build uppercase index and compact index
-        for en, zh in self.en_to_zh.items():
-            self._upper_index[en.upper()] = (en, zh)
-            compact = en.upper().replace(" ", "").replace("-", "")
-            self._compact_index[compact] = zh
+        for source, target in self.source_to_target.items():
+            self._upper_index[source.upper()] = (source, target)
+            compact = source.upper().replace(" ", "").replace("-", "")
+            self._compact_index[compact] = target
 
     def _load_all(self, base_dir: Path):
         for category, (filename, id_col) in TERM_FILES.items():
@@ -55,7 +63,7 @@ class Glossary:
             self._load_csv(path, id_col)
 
     def _load_csv(self, path: Path, id_col: str):
-        """Load a PokeAPI names CSV and build en->zh mapping."""
+        """Load a PokeAPI names CSV and build source->target mapping."""
         # Group by entity ID
         by_id: dict[int, dict[int, str]] = {}
         with open(path, encoding="utf-8") as f:
@@ -68,27 +76,27 @@ class Glossary:
                     by_id[entity_id] = {}
                 by_id[entity_id][lang_id] = name
 
-        # Build en -> zh mapping
+        # Build source -> target mapping
         for entity_id, names in by_id.items():
-            en_name = names.get(LANG_EN, "")
-            zh_name = names.get(LANG_ZH_HANS) or names.get(LANG_ZH_HANT, "")
-            if en_name and zh_name:
-                self.en_to_zh[en_name] = zh_name
-                self.en_to_zh[en_name.upper()] = zh_name
-                self._upper_index[en_name.upper()] = (en_name, zh_name)
-                compact = en_name.upper().replace(" ", "").replace("-", "")
-                self._compact_index[compact] = zh_name
+            source_name = names.get(self.source_id, "")
+            target_name = names.get(self.target_id, "")
+            if source_name and target_name:
+                self.source_to_target[source_name] = target_name
+                self.source_to_target[source_name.upper()] = target_name
+                self._upper_index[source_name.upper()] = (source_name, target_name)
+                compact = source_name.upper().replace(" ", "").replace("-", "")
+                self._compact_index[compact] = target_name
 
-    def lookup(self, english: str) -> str | None:
-        """Look up Chinese translation for an English term.
+    def lookup(self, source_text: str) -> str | None:
+        """Look up target translation for a source term.
 
         Falls back to compact matching (no spaces/hyphens) for GBA's
         truncated names like THUNDERPUNCH → Thunder Punch.
         """
-        result = self.en_to_zh.get(english) or self.en_to_zh.get(english.upper())
+        result = self.source_to_target.get(source_text) or self.source_to_target.get(source_text.upper())
         if result:
             return result
-        compact = english.upper().replace(" ", "").replace("-", "")
+        compact = source_text.upper().replace(" ", "").replace("-", "")
         return self._compact_index.get(compact)
 
     def apply_to_text(self, text: str) -> str:
@@ -97,11 +105,11 @@ class Glossary:
 
         result = text
         # Sort by length (longest first) to avoid partial replacements
-        for en, zh in sorted(self.en_to_zh.items(), key=lambda x: -len(x[0])):
+        for source, target in sorted(self.source_to_target.items(), key=lambda x: -len(x[0])):
             # Use word boundaries to avoid matching substrings inside other words
             # e.g. "Dig" should not match inside "Indigo"
-            pattern = re.compile(r"(?<![A-Za-z])" + re.escape(en) + r"(?![A-Za-z])")
-            result = pattern.sub(zh, result)
+            pattern = re.compile(r"(?<![A-Za-z])" + re.escape(source) + r"(?![A-Za-z])")
+            result = pattern.sub(target, result)
         return result
 
     def get_context_terms(self, text: str, limit: int = 20) -> dict[str, str]:
@@ -112,9 +120,9 @@ class Glossary:
         """
         found: dict[str, str] = {}
         text_upper = text.upper()
-        for upper_key, (en, zh) in self._upper_index.items():
+        for upper_key, (source, target) in self._upper_index.items():
             if upper_key in text_upper:
-                found[en] = zh
+                found[source] = target
                 if len(found) >= limit:
                     break
         return found
