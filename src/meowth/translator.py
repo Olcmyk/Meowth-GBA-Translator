@@ -9,14 +9,14 @@ from pathlib import Path
 
 import httpx
 
-from .languages import get_language_name
+from .languages import get_language_name, get_language_name_zh
 
 DEFAULT_CACHE_DIR = Path(__file__).parent.parent.parent / "work" / "cache"
 
 # Language-specific prompt templates
 PROMPT_TEMPLATES = {
     "zh-Hans": {
-        "system": """你是一个专业的宝可梦游戏本地化翻译专家。请将以下宝可梦游戏的英文文本翻译成简体中文。
+        "system": """你是一个专业的宝可梦游戏本地化翻译专家。请将以下宝可梦游戏文本从{source_lang}翻译成简体中文。
 
 核心规则：
 1. 控制码占位符（如 {{C0}}, {{C1}} 等）必须原样保留，不得修改、删除或增加
@@ -40,7 +40,7 @@ PROMPT_TEMPLATES = {
 
 术语表：
 {glossary}""",
-        "user": """请将以下宝可梦游戏文本从英文翻译成简体中文。
+        "user": """请将以下宝可梦游戏文本从{source_lang}翻译成简体中文。
 每条文本用 ||| 分隔，请按相同顺序返回翻译结果，也用 ||| 分隔。
 不要添加编号或额外说明，只返回翻译后的文本。
 
@@ -94,19 +94,25 @@ class Translator:
         self.source_lang = source_lang
         self.target_lang = target_lang
 
-        # Select appropriate prompt template
-        if target_lang in PROMPT_TEMPLATES:
-            self.prompts = PROMPT_TEMPLATES[target_lang]
+        # Select appropriate prompt template and fill in language names
+        source_name = get_language_name(source_lang)
+        target_name = get_language_name(target_lang)
+        template_key = target_lang if target_lang in PROMPT_TEMPLATES else "generic"
+        # For Chinese template, use Chinese language names
+        if template_key == "zh-Hans":
+            source_name_local = get_language_name_zh(source_lang)
+            target_name_local = get_language_name_zh(target_lang)
         else:
-            # Use generic template with language names
-            self.prompts = {
-                "system": PROMPT_TEMPLATES["generic"]["system"].replace(
-                    "{source_lang}", get_language_name(source_lang)
-                ).replace("{target_lang}", get_language_name(target_lang)),
-                "user": PROMPT_TEMPLATES["generic"]["user"].replace(
-                    "{source_lang}", get_language_name(source_lang)
-                ).replace("{target_lang}", get_language_name(target_lang)),
-            }
+            source_name_local = source_name
+            target_name_local = target_name
+        self.prompts = {
+            "system": PROMPT_TEMPLATES[template_key]["system"].replace(
+                "{source_lang}", source_name_local
+            ).replace("{target_lang}", target_name_local),
+            "user": PROMPT_TEMPLATES[template_key]["user"].replace(
+                "{source_lang}", source_name_local
+            ).replace("{target_lang}", target_name_local),
+        }
 
     def _cache_key(self, request_data: dict) -> str:
         content = json.dumps(request_data, sort_keys=True, ensure_ascii=False)
@@ -219,11 +225,10 @@ class Translator:
         system = self.prompts["system"].replace("{glossary}", glossary_context or "（无）")
         results = []
         for text in texts:
-            # Use the appropriate user prompt for single text
-            if self.target_lang == "zh-Hans":
-                user = f"请将以下宝可梦游戏文本从英文翻译成简体中文。\n\n{text}"
-            else:
-                user = f"Translate the following Pokemon game text from {get_language_name(self.source_lang)} to {get_language_name(self.target_lang)}.\n\n{text}"
+            # Build single-text user prompt from the template
+            user = self.prompts["user"].replace(
+                "{texts}", text
+            ).split("\n")[0] + f"\n\n{text}"
 
             request_data = {
                 "model": self.model,

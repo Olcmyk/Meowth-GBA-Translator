@@ -2,7 +2,7 @@
 
 ## Overview
 
-Successfully implemented support for Latin-to-Latin language translations (Spanish, German, French, Italian, Portuguese) in the Meowth GBA Pokemon translation tool. The system now supports translations between any of the 7 supported languages without requiring font patching for Latin languages.
+Successfully implemented support for Latin-to-Latin language translations (Spanish, German, French, Italian) in the Meowth GBA Pokemon translation tool. The system now supports translations between any of the 6 supported languages without requiring font patching for Latin languages.
 
 ## Supported Languages
 
@@ -11,7 +11,6 @@ Successfully implemented support for Latin-to-Latin language translations (Spani
 - **French** (fr) - PokeAPI ID: 5
 - **German** (de) - PokeAPI ID: 6
 - **Italian** (it) - PokeAPI ID: 8
-- **Portuguese (Brazil)** (pt-BR) - PokeAPI ID: 1
 - **Simplified Chinese** (zh-Hans) - PokeAPI ID: 12
 
 ## Key Changes
@@ -229,13 +228,12 @@ Expected: Font patch skipped, Spanish text displays correctly
 
 ### 5. Terminology
 - Use PokeAPI databases for all language pairs
-- All 5 Latin languages have complete terminology available
+- All 4 Latin languages have complete terminology available
 - Dynamic glossary loading based on language pair
 
 ## Known Limitations
 
-1. **Portuguese (pt-BR):** Characters ã and õ are replaced with a and o (not in PCS charset)
-2. **Font Patch:** Only supports CJK languages (Chinese, Japanese, Korean)
+1. **Font Patch:** Only supports CJK languages (Chinese, Japanese, Korean)
 3. **PokeAPI Data:** Requires PokeAPI CSV files in `pokeapi-master/data/v2/csv/`
 4. **LLM Translation:** Requires DeepSeek API key for translation step
 

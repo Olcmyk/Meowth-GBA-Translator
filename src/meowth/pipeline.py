@@ -226,7 +226,7 @@ class Pipeline:
         for entry in table["entries"]:
             original = entry["original"].strip('"')
             # Check manual overrides for trainer classes
-            if category == "trainer_classes" and original in _TRAINER_CLASS_OVERRIDES:
+            if category == "trainer_classes" and self.target_lang == "zh-Hans" and original in _TRAINER_CLASS_OVERRIDES:
                 entry["translated"] = _TRAINER_CLASS_OVERRIDES[original]
                 continue
             # Try glossary lookup first
@@ -256,11 +256,11 @@ class Pipeline:
 
     def _translate_free_batch(self, batch: list[dict]):
         """Translate a batch of free text entries via LLM."""
-        # Apply hardcoded overrides first (FireRed only)
+        # Apply hardcoded overrides first (FireRed + Chinese only)
         remaining = []
         for entry in batch:
             entry_id = entry.get("id", "")
-            if self.game == "firered" and entry_id in _HARDCODED_TRANSLATIONS:
+            if self.game == "firered" and self.target_lang == "zh-Hans" and entry_id in _HARDCODED_TRANSLATIONS:
                 entry["translated"] = _HARDCODED_TRANSLATIONS[entry_id]
             else:
                 remaining.append(entry)
@@ -298,7 +298,7 @@ class Pipeline:
         terms = self.glossary.get_context_terms(text)
         if not terms:
             return ""
-        return "\n".join(f"  {en} = {zh}" for en, zh in terms.items())
+        return "\n".join(f"  {src} = {tgt}" for src, tgt in terms.items())
 
     def build_rom(
         self,
@@ -425,7 +425,7 @@ class Pipeline:
 
         texts_path = work_dir / "texts.json"
         translated_path = work_dir / "texts_translated.json"
-        output_path = output_dir / f"{self.game}_cn_{timestamp}.gba"
+        output_path = output_dir / f"{self.game}_{self.target_lang}_{timestamp}.gba"
 
         print("[1/3] Extracting texts from ROM...")
         self.extract_texts(rom_path, texts_path)
