@@ -102,7 +102,7 @@ jobs:
             --hidden-import click \
             --hidden-import httpx \
             --collect-all customtkinter \
-            src/meowth/gui/app.py
+            launcher.py
 
       - name: Create DMG
         run: |
@@ -217,7 +217,7 @@ jobs:
             --hidden-import click \
             --hidden-import httpx \
             --collect-all customtkinter \
-            src/meowth/gui/app.py
+            launcher.py
 
       - name: Create ZIP
         shell: pwsh
