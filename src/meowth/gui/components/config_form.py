@@ -1,154 +1,178 @@
-"""Configuration form component for translation settings."""
+"""Configuration form component using CustomTkinter."""
 
 from pathlib import Path
+from tkinter import filedialog
 
-from nicegui import ui
+import customtkinter as ctk
 
 from ...core import TranslationConfig
 from ...translator import PROVIDER_PRESETS
 
+# Language display name -> language code (must match languages.py)
+LANGUAGES = {
+    "English": "en",
+    "Chinese": "zh-Hans",
+    "Spanish": "es",
+    "French": "fr",
+    "German": "de",
+    "Italian": "it",
+}
 
-class ConfigForm:
-    """Component for configuring translation settings."""
+LANG_NAMES = list(LANGUAGES.keys())
 
-    def __init__(self):
-        """Initialize the configuration form."""
-        self.config = TranslationConfig()
 
-        with ui.card().classes("w-full"):
-            ui.label("Configuration").classes("text-h6")
+class ConfigForm(ctk.CTkFrame):
+    """Configuration form for translation settings."""
 
-            # ROM file selection
-            with ui.row().classes("w-full items-center gap-2"):
-                self.rom_input = ui.input(
-                    label="ROM File",
-                    placeholder="Select a GBA ROM file...",
-                ).classes("flex-grow").props("readonly")
+    def __init__(self, master):
+        """Initialize configuration form."""
+        super().__init__(master, corner_radius=10)
 
-                ui.button("Browse", on_click=self._browse_rom, icon="folder_open")
+        inner = ctk.CTkFrame(self, fg_color="transparent")
+        inner.pack(fill="x", padx=14, pady=10)
 
-            # Language selection
-            with ui.row().classes("w-full gap-4"):
-                self.source_lang = ui.select(
-                    label="Source Language",
-                    options=["en", "ja", "es", "fr", "de", "it"],
-                    value="en",
-                ).classes("flex-1")
+        # --- Row 1: ROM File ---
+        ctk.CTkLabel(inner, text="ROM File", font=("", 12, "bold")).pack(anchor="w")
+        rom_row = ctk.CTkFrame(inner, fg_color="transparent")
+        rom_row.pack(fill="x", pady=(2, 8))
+        self.rom_entry = ctk.CTkEntry(
+            rom_row, placeholder_text="Select a GBA ROM file...", height=30
+        )
+        self.rom_entry.pack(side="left", fill="x", expand=True, padx=(0, 8))
+        ctk.CTkButton(
+            rom_row, text="Browse", width=80, height=30, command=self._browse_rom
+        ).pack(side="right")
 
-                self.target_lang = ui.select(
-                    label="Target Language",
-                    options=["zh-Hans", "zh-Hant", "ja", "ko", "es", "fr", "de", "it", "pt", "ru"],
-                    value="zh-Hans",
-                ).classes("flex-1")
+        # --- Row 2: Languages ---
+        ctk.CTkLabel(inner, text="Languages", font=("", 12, "bold")).pack(anchor="w")
+        lang_row = ctk.CTkFrame(inner, fg_color="transparent")
+        lang_row.pack(fill="x", pady=(2, 8))
 
-            # LLM provider selection
-            with ui.expansion("LLM API Settings", icon="settings").classes("w-full"):
-                self.provider = ui.select(
-                    label="Provider",
-                    options=list(PROVIDER_PRESETS.keys()),
-                    value="deepseek",
-                ).classes("w-full")
+        src_frame = ctk.CTkFrame(lang_row, fg_color="transparent")
+        src_frame.pack(side="left", fill="x", expand=True, padx=(0, 6))
+        ctk.CTkLabel(src_frame, text="Source:", font=("", 11)).pack(anchor="w")
+        self.source_lang = ctk.CTkComboBox(src_frame, values=LANG_NAMES, state="readonly", height=30)
+        self.source_lang.set("English")
+        self.source_lang.pack(fill="x", pady=(2, 0))
 
-                self.api_base = ui.input(
-                    label="API Base URL (optional)",
-                    placeholder="Leave empty to use provider default",
-                ).classes("w-full")
+        tgt_frame = ctk.CTkFrame(lang_row, fg_color="transparent")
+        tgt_frame.pack(side="right", fill="x", expand=True, padx=(6, 0))
+        ctk.CTkLabel(tgt_frame, text="Target:", font=("", 11)).pack(anchor="w")
+        self.target_lang = ctk.CTkComboBox(tgt_frame, values=LANG_NAMES, state="readonly", height=30)
+        self.target_lang.set("Chinese")
+        self.target_lang.pack(fill="x", pady=(2, 0))
 
-                self.api_key_env = ui.input(
-                    label="API Key Environment Variable",
-                    placeholder="e.g., DEEPSEEK_API_KEY",
-                ).classes("w-full")
+        # --- Row 3: Provider + Model ---
+        ctk.CTkLabel(inner, text="LLM API", font=("", 12, "bold")).pack(anchor="w")
+        pm_row = ctk.CTkFrame(inner, fg_color="transparent")
+        pm_row.pack(fill="x", pady=(2, 4))
 
-                self.model = ui.input(
-                    label="Model Name (optional)",
-                    placeholder="Leave empty to use provider default",
-                ).classes("w-full")
+        prov_frame = ctk.CTkFrame(pm_row, fg_color="transparent")
+        prov_frame.pack(side="left", fill="x", expand=True, padx=(0, 6))
+        ctk.CTkLabel(prov_frame, text="Provider:", font=("", 11)).pack(anchor="w")
+        self.provider = ctk.CTkComboBox(
+            prov_frame, values=list(PROVIDER_PRESETS.keys()),
+            state="readonly", height=30, command=self._on_provider_change
+        )
+        self.provider.set("deepseek")
+        self.provider.pack(fill="x", pady=(2, 0))
 
-            # Advanced settings
-            with ui.expansion("Advanced Settings", icon="tune").classes("w-full"):
-                with ui.row().classes("w-full gap-4"):
-                    self.batch_size = ui.number(
-                        label="Batch Size",
-                        value=30,
-                        min=1,
-                        max=100,
-                    ).classes("flex-1")
+        model_frame = ctk.CTkFrame(pm_row, fg_color="transparent")
+        model_frame.pack(side="right", fill="x", expand=True, padx=(6, 0))
+        ctk.CTkLabel(model_frame, text="Model:", font=("", 11)).pack(anchor="w")
+        self.model_entry = ctk.CTkEntry(model_frame, height=30)
+        self.model_entry.insert(0, PROVIDER_PRESETS["deepseek"][1])
+        self.model_entry.pack(fill="x", pady=(2, 0))
 
-                    self.max_workers = ui.number(
-                        label="Max Workers",
-                        value=10,
-                        min=1,
-                        max=50,
-                    ).classes("flex-1")
+        # --- Row 4: API Key ---
+        ctk.CTkLabel(inner, text="API Key:", font=("", 11)).pack(anchor="w", pady=(4, 0))
+        self.api_key_entry = ctk.CTkEntry(
+            inner, placeholder_text="sk-xxxxxxxxxxxxxxxxxxxxxxxx", height=30, show="*"
+        )
+        self.api_key_entry.pack(fill="x", pady=(2, 0))
 
-                with ui.row().classes("w-full gap-4"):
-                    self.output_dir = ui.input(
-                        label="Output Directory",
-                        value="outputs",
-                    ).classes("flex-1")
+        # --- Advanced (collapsible) ---
+        self.advanced_visible = False
+        self.advanced_button = ctk.CTkButton(
+            inner, text="+ Advanced", command=self._toggle_advanced,
+            fg_color="transparent", text_color=("gray40", "gray60"),
+            hover_color=("gray85", "gray25"), height=24, font=("", 11),
+        )
+        self.advanced_button.pack(anchor="w", pady=(6, 0))
 
-                    self.work_dir = ui.input(
-                        label="Work Directory",
-                        value="work",
-                    ).classes("flex-1")
+        self.advanced_frame = ctk.CTkFrame(inner, fg_color="transparent")
+        adv_row = ctk.CTkFrame(self.advanced_frame, fg_color="transparent")
+        adv_row.pack(fill="x", pady=(4, 0))
 
-    async def _browse_rom(self):
-        """Open file browser to select ROM file."""
-        # Note: NiceGUI file picker requires async
-        result = await ui.run_javascript("""
-            return new Promise((resolve) => {
-                const input = document.createElement('input');
-                input.type = 'file';
-                input.accept = '.gba';
-                input.onchange = (e) => {
-                    const file = e.target.files[0];
-                    if (file) {
-                        resolve(file.name);
-                    } else {
-                        resolve(null);
-                    }
-                };
-                input.click();
-            });
-        """)
+        bf = ctk.CTkFrame(adv_row, fg_color="transparent")
+        bf.pack(side="left", fill="x", expand=True, padx=(0, 6))
+        ctk.CTkLabel(bf, text="Batch Size:", font=("", 11)).pack(anchor="w")
+        self.batch_size = ctk.CTkEntry(bf, height=30)
+        self.batch_size.insert(0, "30")
+        self.batch_size.pack(fill="x", pady=(2, 0))
 
-        if result:
-            self.rom_input.set_value(result)
+        wf = ctk.CTkFrame(adv_row, fg_color="transparent")
+        wf.pack(side="right", fill="x", expand=True, padx=(6, 0))
+        ctk.CTkLabel(wf, text="Max Workers:", font=("", 11)).pack(anchor="w")
+        self.max_workers = ctk.CTkEntry(wf, height=30)
+        self.max_workers.insert(0, "10")
+        self.max_workers.pack(fill="x", pady=(2, 0))
+
+    def _on_provider_change(self, provider_name: str):
+        """Update default model when provider changes."""
+        preset = PROVIDER_PRESETS.get(provider_name)
+        if preset:
+            self.model_entry.delete(0, "end")
+            self.model_entry.insert(0, preset[1])
+
+    def _browse_rom(self):
+        """Open file dialog to select ROM."""
+        filename = filedialog.askopenfilename(
+            title="Select GBA ROM",
+            filetypes=[("GBA ROM files", "*.gba"), ("All files", "*.*")],
+        )
+        if filename:
+            self.rom_entry.delete(0, "end")
+            self.rom_entry.insert(0, filename)
+
+    def _toggle_advanced(self):
+        """Toggle advanced settings visibility."""
+        if self.advanced_visible:
+            self.advanced_frame.pack_forget()
+            self.advanced_button.configure(text="+ Advanced")
+            self.advanced_visible = False
+        else:
+            self.advanced_frame.pack(fill="x")
+            self.advanced_button.configure(text="- Advanced")
+            self.advanced_visible = True
+
+    def _lang_name_to_code(self, name: str) -> str:
+        return LANGUAGES.get(name, "en")
 
     def get_config(self) -> TranslationConfig:
-        """Get current configuration.
-
-        Returns:
-            TranslationConfig instance with current form values
-        """
+        """Get current configuration."""
+        provider = self.provider.get()
+        preset = PROVIDER_PRESETS.get(provider)
+        api_key = self.api_key_entry.get().strip()
         return TranslationConfig(
-            source_lang=self.source_lang.value,
-            target_lang=self.target_lang.value,
-            provider=self.provider.value if self.provider.value else None,
-            api_base=self.api_base.value if self.api_base.value else None,
-            api_key_env=self.api_key_env.value if self.api_key_env.value else None,
-            model=self.model.value if self.model.value else None,
-            batch_size=int(self.batch_size.value),
-            max_workers=int(self.max_workers.value),
-            rom_path=Path(self.rom_input.value) if self.rom_input.value else None,
-            output_dir=Path(self.output_dir.value),
-            work_dir=Path(self.work_dir.value),
+            source_lang=self._lang_name_to_code(self.source_lang.get()),
+            target_lang=self._lang_name_to_code(self.target_lang.get()),
+            provider=provider if provider else None,
+            model=self.model_entry.get().strip() or (preset[1] if preset else None),
+            api_key_env=preset[2] if preset else None,
+            api_key=api_key if api_key else None,
+            batch_size=int(self.batch_size.get()) if self.batch_size.get().isdigit() else 30,
+            max_workers=int(self.max_workers.get()) if self.max_workers.get().isdigit() else 10,
+            rom_path=Path(self.rom_entry.get()) if self.rom_entry.get() else None,
         )
 
     def validate(self) -> tuple[bool, str]:
-        """Validate configuration.
-
-        Returns:
-            Tuple of (is_valid, error_message)
-        """
-        if not self.rom_input.value:
+        """Validate configuration."""
+        if not self.rom_entry.get():
             return False, "Please select a ROM file"
-
-        rom_path = Path(self.rom_input.value)
+        rom_path = Path(self.rom_entry.get())
         if not rom_path.exists():
             return False, f"ROM file not found: {rom_path}"
-
-        if not self.api_key_env.value:
-            return False, "Please specify API key environment variable"
-
+        if not self.api_key_entry.get().strip():
+            return False, "Please enter your API key"
         return True, ""

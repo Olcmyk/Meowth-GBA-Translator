@@ -1,4 +1,4 @@
-"""GUI components for Meowth translator."""
+"""GUI components for CustomTkinter interface."""
 
 from .config_form import ConfigForm
 from .log_view import LogView

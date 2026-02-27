@@ -1,73 +1,53 @@
-"""Log view component for displaying translation logs."""
+"""Log view component using CustomTkinter."""
 
 from datetime import datetime
 
-from nicegui import ui
+import customtkinter as ctk
 
 
-class LogView:
-    """Component for displaying scrollable translation logs with level filtering."""
+class LogView(ctk.CTkFrame):
+    """Scrollable log viewer with color-coded messages."""
 
-    def __init__(self):
-        """Initialize the log view."""
-        self.logs = []
-        self.max_logs = 1000  # Keep last 1000 log entries
+    def __init__(self, master):
+        """Initialize log view."""
+        super().__init__(master, corner_radius=10)
 
-        with ui.card().classes("w-full"):
-            with ui.row().classes("w-full items-center"):
-                ui.label("Logs").classes("text-h6")
-                ui.space()
-                self.clear_button = ui.button("Clear", on_click=self.clear, icon="delete").props(
-                    "flat dense"
-                )
+        # Header
+        header = ctk.CTkFrame(self, fg_color="transparent")
+        header.pack(fill="x", padx=14, pady=(12, 6))
 
-            # Log container with scroll
-            self.log_container = ui.scroll_area().classes("w-full h-64 bg-grey-1 p-2 rounded")
-            with self.log_container:
-                self.log_column = ui.column().classes("w-full gap-1")
+        ctk.CTkLabel(header, text="Logs", font=("", 13, "bold")).pack(side="left")
+        ctk.CTkButton(
+            header, text="Clear", width=60, height=26,
+            font=("", 11), corner_radius=6,
+            fg_color="transparent", border_width=1,
+            border_color=("gray60", "gray40"),
+            text_color=("gray40", "gray60"),
+            hover_color=("gray85", "gray25"),
+            command=self.clear,
+        ).pack(side="right")
+
+        # Log text area
+        self.textbox = ctk.CTkTextbox(
+            self, height=160, wrap="word",
+            corner_radius=6, font=("Menlo", 12),
+        )
+        self.textbox.pack(fill="both", expand=True, padx=14, pady=(0, 12))
+
+        # Color tags
+        self.textbox.tag_config("info", foreground="#e5e7eb")
+        self.textbox.tag_config("warning", foreground="#fbbf24")
+        self.textbox.tag_config("error", foreground="#f87171")
+        self.textbox.tag_config("timestamp", foreground="#6b7280")
 
     def append(self, level: str, message: str):
-        """Append a log message.
-
-        Args:
-            level: Log level (info, warning, error)
-            message: Log message text
-        """
-        timestamp = datetime.now().strftime("%H:%M:%S")
-        log_entry = {"timestamp": timestamp, "level": level, "message": message}
-
-        self.logs.append(log_entry)
-
-        # Keep only last max_logs entries
-        if len(self.logs) > self.max_logs:
-            self.logs = self.logs[-self.max_logs :]
-
-        # Add to UI
-        with self.log_column:
-            self._create_log_entry(log_entry)
-
-        # Auto-scroll to bottom
-        self.log_container.scroll_to(percent=1.0)
-
-    def _create_log_entry(self, entry: dict):
-        """Create a log entry UI element.
-
-        Args:
-            entry: Log entry dict with timestamp, level, and message
-        """
-        level = entry["level"]
-        color_map = {
-            "info": "text-grey-8",
-            "warning": "text-orange",
-            "error": "text-red",
-        }
-        color = color_map.get(level, "text-grey-8")
-
-        with ui.row().classes("gap-2 items-start"):
-            ui.label(entry["timestamp"]).classes("text-xs text-grey-6 shrink-0")
-            ui.label(entry["message"]).classes(f"text-sm {color}")
+        """Append a log message."""
+        ts = datetime.now().strftime("%H:%M:%S")
+        self.textbox.insert("end", f"[{ts}] ", "timestamp")
+        tag = level if level in ("info", "warning", "error") else "info"
+        self.textbox.insert("end", f"{message}\n", tag)
+        self.textbox.see("end")
 
     def clear(self):
         """Clear all log entries."""
-        self.logs.clear()
-        self.log_column.clear()
+        self.textbox.delete("1.0", "end")

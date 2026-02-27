@@ -1,4 +1,4 @@
-"""NiceGUI interface for Meowth translator."""
+"""GUI application for Meowth GBA Translator."""
 
 from .app import MeowthGUI, main
 

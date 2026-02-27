@@ -1,93 +1,101 @@
-"""Progress view component for displaying translation progress."""
+"""Progress view component using CustomTkinter."""
 
-from nicegui import ui
+import customtkinter as ctk
 
 
-class ProgressView:
-    """Component for displaying translation progress with progress bars and stage indicators."""
+class ProgressView(ctk.CTkFrame):
+    """Progress display: checkmarks for extract/build, progress bar for translate."""
 
-    def __init__(self):
-        """Initialize the progress view."""
-        self.current_stage = None
-        self.stages = {
-            "extract": {"label": "Extracting texts", "status": "pending"},
-            "translate": {"label": "Translating texts", "status": "pending"},
-            "build": {"label": "Building ROM", "status": "pending"},
-        }
+    def __init__(self, master):
+        """Initialize progress view."""
+        super().__init__(master, corner_radius=10)
 
-        with ui.card().classes("w-full"):
-            ui.label("Translation Progress").classes("text-h6")
+        ctk.CTkLabel(
+            self, text="Progress", font=("", 13, "bold")
+        ).pack(anchor="w", padx=14, pady=(12, 8))
 
-            # Stage indicators
-            with ui.row().classes("w-full gap-4"):
-                self.stage_labels = {}
-                self.stage_icons = {}
-                for stage_id, stage_info in self.stages.items():
-                    with ui.column().classes("items-center"):
-                        self.stage_labels[stage_id] = ui.label(stage_info["label"]).classes(
-                            "text-grey"
-                        )
-                        self.stage_icons[stage_id] = ui.icon("circle", size="sm").classes("text-grey")
+        inner = ctk.CTkFrame(self, fg_color="transparent")
+        inner.pack(fill="x", padx=14, pady=(0, 12))
 
-            # Progress bar
-            self.progress_bar = ui.linear_progress(value=0).classes("w-full")
-            self.progress_label = ui.label("Ready to start").classes("text-sm text-grey")
+        # --- Step 1: Extract ---
+        row1 = ctk.CTkFrame(inner, fg_color="transparent")
+        row1.pack(fill="x", pady=(0, 6))
+        self.extract_icon = ctk.CTkLabel(row1, text="○", width=24, font=("", 14))
+        self.extract_icon.pack(side="left")
+        self.extract_label = ctk.CTkLabel(
+            row1, text="Extract texts from ROM", text_color="gray", font=("", 12)
+        )
+        self.extract_label.pack(side="left", padx=(6, 0))
+
+        # --- Step 2: Translate (with progress bar) ---
+        row2 = ctk.CTkFrame(inner, fg_color="transparent")
+        row2.pack(fill="x", pady=(0, 2))
+        self.translate_icon = ctk.CTkLabel(row2, text="○", width=24, font=("", 14))
+        self.translate_icon.pack(side="left")
+        self.translate_label = ctk.CTkLabel(
+            row2, text="Translate texts", text_color="gray", font=("", 12)
+        )
+        self.translate_label.pack(side="left", padx=(6, 0))
+
+        # Progress bar for translate step
+        bar_row = ctk.CTkFrame(inner, fg_color="transparent")
+        bar_row.pack(fill="x", pady=(2, 6), padx=(30, 0))
+
+        self.progress_bar = ctk.CTkProgressBar(
+            bar_row, height=8, corner_radius=4, progress_color="#2563eb",
+        )
+        self.progress_bar.pack(fill="x", side="left", expand=True, padx=(0, 10))
+        self.progress_bar.set(0)
+
+        self.batch_label = ctk.CTkLabel(
+            bar_row, text="0/0", text_color="gray", font=("", 11), width=70,
+        )
+        self.batch_label.pack(side="right")
+
+        # --- Step 3: Build ROM ---
+        row3 = ctk.CTkFrame(inner, fg_color="transparent")
+        row3.pack(fill="x", pady=(0, 0))
+        self.build_icon = ctk.CTkLabel(row3, text="○", width=24, font=("", 14))
+        self.build_icon.pack(side="left")
+        self.build_label = ctk.CTkLabel(
+            row3, text="Build ROM", text_color="gray", font=("", 12)
+        )
+        self.build_label.pack(side="left", padx=(6, 0))
 
     def update(self, stage: str, current: int, total: int, message: str):
-        """Update progress bar and message.
-
-        Args:
-            stage: Current stage name
-            current: Current item number
-            total: Total number of items
-            message: Progress message
-        """
-        if total > 0:
-            progress = current / total
-            self.progress_bar.set_value(progress)
-            self.progress_label.set_text(f"{message} ({current}/{total})")
-        else:
-            self.progress_label.set_text(message)
+        """Update translate progress bar and batch count."""
+        if stage == "translate" and total > 0:
+            self.progress_bar.set(current / total)
+            self.batch_label.configure(text=f"{current}/{total}")
 
     def set_stage(self, stage: str, status: str):
-        """Update stage status.
-
-        Args:
-            stage: Stage name (extract, translate, build)
-            status: Status (started, completed, failed)
-        """
-        if stage not in self.stages:
+        """Update stage status with checkmark icons."""
+        icon_map = {
+            "extract": (self.extract_icon, self.extract_label),
+            "translate": (self.translate_icon, self.translate_label),
+            "build": (self.build_icon, self.build_label),
+        }
+        pair = icon_map.get(stage)
+        if not pair:
             return
+        icon, label = pair
 
-        self.current_stage = stage
-        self.stages[stage]["status"] = status
-
-        # Update stage label and icon color
-        label = self.stage_labels.get(stage)
-        icon = self.stage_icons.get(stage)
-
-        if label and icon:
-            if status == "started":
-                label.classes(remove="text-grey text-green text-red", add="text-blue")
-                icon.classes(remove="text-grey text-green text-red", add="text-blue")
-            elif status == "completed":
-                label.classes(remove="text-grey text-blue text-red", add="text-green")
-                icon.classes(remove="text-grey text-blue text-red", add="text-green")
-            elif status == "failed":
-                label.classes(remove="text-grey text-blue text-green", add="text-red")
-                icon.classes(remove="text-grey text-blue text-green", add="text-red")
+        if status == "started":
+            icon.configure(text="◉", text_color="#2563eb")
+            label.configure(text_color="#e5e7eb")
+        elif status == "completed":
+            icon.configure(text="✓", text_color="#16a34a")
+            label.configure(text_color="#16a34a")
+        elif status == "failed":
+            icon.configure(text="✗", text_color="#dc2626")
+            label.configure(text_color="#dc2626")
+        else:
+            icon.configure(text="○", text_color="gray")
+            label.configure(text_color="gray")
 
     def reset(self):
-        """Reset progress view to initial state."""
-        self.progress_bar.set_value(0)
-        self.progress_label.set_text("Ready to start")
-        self.current_stage = None
-
-        for stage_id in self.stages:
-            self.stages[stage_id]["status"] = "pending"
-            label = self.stage_labels.get(stage_id)
-            icon = self.stage_icons.get(stage_id)
-            if label:
-                label.classes(remove="text-blue text-green text-red", add="text-grey")
-            if icon:
-                icon.classes(remove="text-blue text-green text-red", add="text-grey")
+        """Reset progress view."""
+        self.progress_bar.set(0)
+        self.batch_label.configure(text="0/0")
+        for stage in ("extract", "translate", "build"):
+            self.set_stage(stage, "pending")

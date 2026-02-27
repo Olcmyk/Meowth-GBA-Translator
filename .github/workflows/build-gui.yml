@@ -1,0 +1,187 @@
+name: Build GUI App
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  build-binaries:
+    name: Build C# binaries
+    uses: ./.github/workflows/build-csharp.yml
+
+  build-macos:
+    name: Build macOS App
+    runs-on: macos-latest
+    needs: build-binaries
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Initialize submodules
+        run: |
+          git submodule update --init HexManiacAdvance
+          git submodule update --init Pokemon_GBA_Font_Patch
+          git submodule update --init armips
+          git submodule update --init pokeapi
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          pip install pyinstaller customtkinter Pillow click httpx
+
+      - name: Download MeowthBridge binary
+        uses: actions/download-artifact@v4
+        with:
+          name: meowth-bridge-macos
+          path: src/meowth/binaries/macos/
+
+      - name: Make MeowthBridge executable
+        run: chmod +x src/meowth/binaries/macos/MeowthBridge
+
+      - name: Build armips
+        run: |
+          cd armips
+          mkdir -p build && cd build
+          cmake .. -DCMAKE_BUILD_TYPE=Release
+          cmake --build . --config Release
+          cp armips ../../tools/armips
+          chmod +x ../../tools/armips
+
+      - name: Get customtkinter path
+        id: ctk
+        run: |
+          CTK_PATH=$(python -c "import customtkinter; import os; print(os.path.dirname(customtkinter.__file__))")
+          echo "path=$CTK_PATH" >> $GITHUB_OUTPUT
+
+      - name: Build with PyInstaller
+        run: |
+          pyinstaller \
+            --name "Meowth Translator" \
+            --windowed \
+            --onedir \
+            --add-data "src/meowth:meowth" \
+            --add-data "resources:resources" \
+            --add-data "Pokemon_GBA_Font_Patch:Pokemon_GBA_Font_Patch" \
+            --add-data "tools:tools" \
+            --add-data "src/meowth/binaries/macos/MeowthBridge:meowth/binaries/macos" \
+            --add-data "${{ steps.ctk.outputs.path }}:customtkinter" \
+            --hidden-import customtkinter \
+            --hidden-import PIL \
+            --hidden-import click \
+            --hidden-import httpx \
+            --collect-all customtkinter \
+            src/meowth/gui/app.py
+
+      - name: Create DMG
+        run: |
+          mkdir -p dmg_content
+          cp -r "dist/Meowth Translator.app" dmg_content/
+          ln -s /Applications dmg_content/Applications
+          hdiutil create -volname "Meowth Translator" \
+            -srcfolder dmg_content \
+            -ov -format UDZO \
+            "dist/Meowth-Translator-macOS.dmg"
+
+      - name: Upload macOS App
+        uses: actions/upload-artifact@v4
+        with:
+          name: meowth-translator-macos
+          path: dist/Meowth-Translator-macOS.dmg
+          retention-days: 30
+
+      - name: Upload to Release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/Meowth-Translator-macOS.dmg
+
+  build-windows:
+    name: Build Windows App
+    runs-on: windows-latest
+    needs: build-binaries
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Initialize submodules
+        run: |
+          git submodule update --init HexManiacAdvance
+          git submodule update --init Pokemon_GBA_Font_Patch
+          git submodule update --init armips
+          git submodule update --init pokeapi
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          pip install pyinstaller customtkinter Pillow click httpx
+
+      - name: Download MeowthBridge binary
+        uses: actions/download-artifact@v4
+        with:
+          name: meowth-bridge-windows
+          path: src/meowth/binaries/windows/
+
+      - name: Setup MSVC for armips
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Build armips
+        run: |
+          cd armips
+          mkdir build
+          cd build
+          cmake .. -DCMAKE_BUILD_TYPE=Release
+          cmake --build . --config Release
+          mkdir -p ../../tools
+          cp Release/armips.exe ../../tools/armips.exe
+
+      - name: Get customtkinter path
+        id: ctk
+        shell: bash
+        run: |
+          CTK_PATH=$(python -c "import customtkinter; import os; print(os.path.dirname(customtkinter.__file__))")
+          echo "path=$CTK_PATH" >> $GITHUB_OUTPUT
+
+      - name: Build with PyInstaller
+        shell: bash
+        run: |
+          pyinstaller \
+            --name "Meowth Translator" \
+            --windowed \
+            --onedir \
+            --add-data "src/meowth;meowth" \
+            --add-data "resources;resources" \
+            --add-data "Pokemon_GBA_Font_Patch;Pokemon_GBA_Font_Patch" \
+            --add-data "tools;tools" \
+            --add-data "src/meowth/binaries/windows/MeowthBridge.exe;meowth/binaries/windows" \
+            --add-data "${{ steps.ctk.outputs.path }};customtkinter" \
+            --hidden-import customtkinter \
+            --hidden-import PIL \
+            --hidden-import click \
+            --hidden-import httpx \
+            --collect-all customtkinter \
+            src/meowth/gui/app.py
+
+      - name: Create ZIP
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "dist\Meowth Translator" -DestinationPath "dist\Meowth-Translator-Windows.zip"
+
+      - name: Upload Windows App
+        uses: actions/upload-artifact@v4
+        with:
+          name: meowth-translator-windows
+          path: dist/Meowth-Translator-Windows.zip
+          retention-days: 30
+
+      - name: Upload to Release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/Meowth-Translator-Windows.zip

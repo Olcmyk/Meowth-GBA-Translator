@@ -163,6 +163,7 @@ class TranslationEngine:
             target_lang=config.target_lang,
             provider=config.provider,
             base_url=config.api_base,
+            api_key=config.api_key,
             api_key_env=config.api_key_env,
             model=config.model,
         )

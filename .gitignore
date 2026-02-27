@@ -53,3 +53,15 @@ hma_workdir/
 
 # Serena
 .serena/
+
+# Debug and temporary documentation files
+PHASE*.md
+*_SUMMARY.md
+*_TESTING.md
+test_*.py
+!tests/test_*.py
+docs/development/plan.md
+docs/development/*_OLD.md
+docs/development/BUGFIX_*.md
+docs/development/CACHE.md
+docs/development/IMPLEMENTATION_*.md

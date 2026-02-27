@@ -20,6 +20,7 @@ class TranslationConfig:
     provider: str | None = None
     api_base: str | None = None
     api_key_env: str | None = None
+    api_key: str | None = None
     model: str | None = None
 
     # Translation settings
@@ -101,6 +102,7 @@ class TranslationConfig:
             provider=self.provider or toml_config.provider,
             api_base=self.api_base or toml_config.api_base,
             api_key_env=self.api_key_env or toml_config.api_key_env,
+            api_key=self.api_key,
             model=self.model or toml_config.model,
             batch_size=self.batch_size if self.batch_size != 30 else toml_config.batch_size,
             max_workers=self.max_workers if self.max_workers != 10 else toml_config.max_workers,
