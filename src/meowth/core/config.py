@@ -1,7 +1,26 @@
 """Unified configuration management for translation pipeline."""
 
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
+
+
+def _get_default_work_dir() -> Path:
+    """Get default work directory in a writable location."""
+    # For GUI apps, use user's home directory
+    if getattr(os, '_MEIPASS', None):  # Running in PyInstaller bundle
+        return Path.home() / "Documents" / "Meowth" / "work"
+    # For CLI, use current directory
+    return Path("work")
+
+
+def _get_default_output_dir() -> Path:
+    """Get default output directory in a writable location."""
+    # For GUI apps, use user's home directory
+    if getattr(os, '_MEIPASS', None):  # Running in PyInstaller bundle
+        return Path.home() / "Documents" / "Meowth" / "outputs"
+    # For CLI, use current directory
+    return Path("outputs")
 
 
 @dataclass
@@ -29,8 +48,8 @@ class TranslationConfig:
 
     # File paths
     rom_path: Path | None = None
-    output_dir: Path = field(default_factory=lambda: Path("outputs"))
-    work_dir: Path = field(default_factory=lambda: Path("work"))
+    output_dir: Path = field(default_factory=_get_default_output_dir)
+    work_dir: Path = field(default_factory=_get_default_work_dir)
 
     # Game detection (auto-detected if not specified)
     game: str = "firered"
