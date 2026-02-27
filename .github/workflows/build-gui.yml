@@ -21,7 +21,7 @@ jobs:
         run: |
           git submodule update --init HexManiacAdvance
           git submodule update --init Pokemon_GBA_Font_Patch
-          git submodule update --init armips
+          git submodule update --init --recursive armips
           git submodule update --init pokeapi
 
       - name: Set up Python
@@ -110,7 +110,7 @@ jobs:
         run: |
           git submodule update --init HexManiacAdvance
           git submodule update --init Pokemon_GBA_Font_Patch
-          git submodule update --init armips
+          git submodule update --init --recursive armips
           git submodule update --init pokeapi
 
       - name: Set up Python
@@ -132,10 +132,10 @@ jobs:
         uses: ilammy/msvc-dev-cmd@v1
 
       - name: Build armips
+        shell: bash
         run: |
           cd armips
-          mkdir build
-          cd build
+          mkdir -p build && cd build
           cmake .. -DCMAKE_BUILD_TYPE=Release
           cmake --build . --config Release
           mkdir -p ../../tools
