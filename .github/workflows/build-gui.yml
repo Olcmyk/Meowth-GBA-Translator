@@ -14,8 +14,6 @@ jobs:
     name: Build macOS App
     runs-on: macos-latest
     needs: build-binaries
-    permissions:
-      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -123,18 +121,10 @@ jobs:
           path: dist/Meowth-Translator-macOS.dmg
           retention-days: 30
 
-      - name: Upload to Release
-        if: github.event_name == 'release'
-        uses: softprops/action-gh-release@v2
-        with:
-          files: dist/Meowth-Translator-macOS.dmg
-
   build-windows:
     name: Build Windows App
     runs-on: windows-latest
     needs: build-binaries
-    permissions:
-      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -241,8 +231,29 @@ jobs:
           path: dist/Meowth-Translator-Windows.zip
           retention-days: 30
 
+  upload-release:
+    name: Upload to Release
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    needs: [build-macos, build-windows]
+    permissions:
+      contents: write
+    steps:
+      - name: Download macOS artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: meowth-translator-macos
+          path: dist/
+
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: meowth-translator-windows
+          path: dist/
+
       - name: Upload to Release
-        if: github.event_name == 'release'
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/Meowth-Translator-Windows.zip
+          files: |
+            dist/Meowth-Translator-macOS.dmg
+            dist/Meowth-Translator-Windows.zip
