@@ -178,7 +178,7 @@ def build(rom_path, translations, output, source, target):
 @add_provider_options
 def full(rom_path, output_dir, work_dir, source, target,
          provider, api_base, api_key_env, model):
-    """Run full pipeline: extract → translate → build ROM."""
+    """Run full pipeline: extract -> translate -> build ROM."""
     source = _get_language(source, "en", "source_language")
     target = _get_language(target, "zh-Hans", "target_language")
     validate_language(source)

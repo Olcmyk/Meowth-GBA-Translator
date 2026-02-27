@@ -404,7 +404,7 @@ class TranslationEngine:
         output_dir: Path | None = None,
         work_dir: Path | None = None,
     ) -> Path:
-        """Run the full translation pipeline: extract → translate → build."""
+        """Run the full translation pipeline: extract -> translate -> build."""
         # Use config values if not provided
         rom_path = rom_path or self.config.rom_path
         output_dir = output_dir or self.config.output_dir

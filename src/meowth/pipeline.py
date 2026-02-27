@@ -114,7 +114,7 @@ class Pipeline:
         output_dir: Path,
         work_dir: Path,
     ) -> Path:
-        """Run the full translation pipeline: extract → translate → build."""
+        """Run the full translation pipeline: extract -> translate -> build."""
         self._engine.config.rom_path = rom_path
         self._engine.config.output_dir = output_dir
         self._engine.config.work_dir = work_dir
