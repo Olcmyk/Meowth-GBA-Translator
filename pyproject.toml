@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "meowth-translator"
-version = "0.1.0"
-description = "GBA Pokemon ROM English-to-Chinese translation tool"
+version = "0.2.0"
+description = "GBA Pokemon ROM translation tool with CLI and GUI support"
 requires-python = ">=3.10"
 dependencies = [
     "click>=8.0",
@@ -14,6 +14,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=7.0", "pytest-asyncio>=0.21"]
+gui = ["nicegui>=1.4.0"]
 
 [project.scripts]
 meowth = "meowth.cli:main"

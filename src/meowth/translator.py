@@ -192,7 +192,8 @@ class Translator:
             if len(parts) == len(texts):
                 return parts
             # Cache had misaligned result — fall through to re-translate
-            print(f"  [缓存分割不匹配 ({len(parts)} vs {len(texts)})，重新翻译]")
+            from .i18n import Messages
+            print(Messages.CACHE_MISMATCH.format(parts=len(parts), texts=len(texts)))
 
         # Call DeepSeek API
         content = self._call_api(system, user)
@@ -208,11 +209,13 @@ class Translator:
             if not has_untranslated:
                 self._save_cache(cache_key, request_data, content)
             else:
-                print(f"  [部分未翻译，不缓存此批次]")
+                from .i18n import Messages
+                print(Messages.PARTIAL_UNTRANSLATED)
             return parts
 
         # Misaligned — fall back to one-by-one translation
-        print(f"  [批量分割不匹配 ({len(parts)} vs {len(texts)})，逐条翻译]")
+        from .i18n import Messages
+        print(Messages.BATCH_SPLIT_MISMATCH.format(parts=len(parts), texts=len(texts)))
         return self._translate_individually(texts, glossary_context)
 
     def _call_api(self, system: str, user: str, max_retries: int = 3) -> str:
@@ -241,7 +244,10 @@ class Translator:
             except (httpx.RemoteProtocolError, httpx.ReadTimeout, httpx.ConnectError) as e:
                 if attempt < max_retries - 1:
                     wait = 2 ** attempt
-                    print(f"  [API 请求失败: {e}，{wait}秒后重试 ({attempt+1}/{max_retries})]")
+                    from .i18n import Messages
+                    print(Messages.API_REQUEST_FAILED.format(
+                        error=e, wait=wait, attempt=attempt+1, max_retries=max_retries
+                    ))
                     time.sleep(wait)
                 else:
                     raise

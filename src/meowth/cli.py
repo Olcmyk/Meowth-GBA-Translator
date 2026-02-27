@@ -4,6 +4,7 @@ from pathlib import Path
 
 import click
 
+from .core import TranslationCallbacks, TranslationConfig, TranslationEngine
 from .languages import validate_language
 from .pipeline import Pipeline
 from .translator import PROVIDER_PRESETS
@@ -74,6 +75,32 @@ def add_provider_options(func):
     return func
 
 
+class CLICallbacks(TranslationCallbacks):
+    """CLI implementation of translation callbacks."""
+
+    def on_log(self, level: str, message: str):
+        """Output log messages to the terminal."""
+        if level == "error":
+            click.secho(message, fg="red", err=True)
+        elif level == "warning":
+            click.secho(message, fg="yellow")
+        else:
+            click.echo(message)
+
+    def on_progress(self, stage: str, current: int, total: int, message: str):
+        """Output progress updates to the terminal."""
+        # Progress is already included in log messages
+        pass
+
+    def on_stage_change(self, stage: str, status: str):
+        """Handle stage changes (not needed for CLI)."""
+        pass
+
+    def on_error(self, error: Exception):
+        """Output errors to the terminal."""
+        click.secho(f"Error: {error}", fg="red", err=True)
+
+
 @click.group()
 def main():
     """Meowth - GBA Pokemon ROM translation tool."""
@@ -91,7 +118,7 @@ def extract(rom_path, output, source, target):
     target = _get_language(target, "zh-Hans", "target_language")
     validate_language(source)
     validate_language(target)
-    Pipeline.extract_texts(Path(rom_path), Path(output))
+    TranslationEngine.extract_texts(Path(rom_path), Path(output))
     click.echo(f"Extracted: {output}")
 
 
@@ -111,8 +138,16 @@ def translate(texts_json, output, batch_size, workers, source, target,
     validate_language(source)
     validate_language(target)
     kwargs = _provider_kwargs(provider, api_base, api_key_env, model)
-    pipeline = Pipeline(source_lang=source, target_lang=target, **kwargs)
-    pipeline.translate_texts(Path(texts_json), Path(output), batch_size, workers)
+
+    config = TranslationConfig(
+        source_lang=source,
+        target_lang=target,
+        batch_size=batch_size,
+        max_workers=workers,
+        **kwargs
+    )
+    engine = TranslationEngine(config, CLICallbacks())
+    engine.translate_texts(Path(texts_json), Path(output))
     click.echo(f"Translated: {output}")
 
 
@@ -128,8 +163,10 @@ def build(rom_path, translations, output, source, target):
     target = _get_language(target, "zh-Hans", "target_language")
     validate_language(source)
     validate_language(target)
-    pipeline = Pipeline(source_lang=source, target_lang=target)
-    pipeline.build_rom(Path(rom_path), Path(translations), Path(output))
+
+    config = TranslationConfig(source_lang=source, target_lang=target)
+    engine = TranslationEngine(config, CLICallbacks())
+    engine.build_rom(Path(rom_path), Path(translations), Path(output))
 
 
 @main.command()
@@ -147,8 +184,17 @@ def full(rom_path, output_dir, work_dir, source, target,
     validate_language(source)
     validate_language(target)
     kwargs = _provider_kwargs(provider, api_base, api_key_env, model)
-    pipeline = Pipeline(source_lang=source, target_lang=target, **kwargs)
-    pipeline.run_full(Path(rom_path), Path(output_dir), Path(work_dir))
+
+    config = TranslationConfig(
+        source_lang=source,
+        target_lang=target,
+        rom_path=Path(rom_path),
+        output_dir=Path(output_dir),
+        work_dir=Path(work_dir),
+        **kwargs
+    )
+    engine = TranslationEngine(config, CLICallbacks())
+    engine.run_full()
 
 
 if __name__ == "__main__":
