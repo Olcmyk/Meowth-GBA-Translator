@@ -429,11 +429,14 @@ class Pipeline:
         else:
             print(f"Warning: could not detect game from ROM header, using: {self.game}")
 
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        # Use original filename (without extension) + language code
+        original_name = rom_path.stem  # e.g. "rogue ex v2.0.1a" from "rogue ex v2.0.1a.gba"
+        # Extract language code from target_lang (e.g. "zh-Hans" -> "zh", "es" -> "es")
+        lang_code = self.target_lang.split("-")[0]
 
         texts_path = work_dir / "texts.json"
         translated_path = work_dir / "texts_translated.json"
-        output_path = output_dir / f"{self.game}_{self.target_lang}_{timestamp}.gba"
+        output_path = output_dir / f"{original_name}_{lang_code}.gba"
 
         print("[1/3] Extracting texts from ROM...")
         self.extract_texts(rom_path, texts_path)
