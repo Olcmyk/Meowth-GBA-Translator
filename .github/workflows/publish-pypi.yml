@@ -26,8 +26,13 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
+
+      - name: Initialize submodules
+        run: |
+          git submodule update --init HexManiacAdvance
+          git submodule update --init Pokemon_GBA_Font_Patch
+          git submodule update --init armips
+          git submodule update --init pokeapi
 
       - name: Set up Python
         uses: actions/setup-python@v5
