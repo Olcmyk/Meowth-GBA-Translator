@@ -21,14 +21,13 @@ class ProgressView:
             # Stage indicators
             with ui.row().classes("w-full gap-4"):
                 self.stage_labels = {}
+                self.stage_icons = {}
                 for stage_id, stage_info in self.stages.items():
                     with ui.column().classes("items-center"):
                         self.stage_labels[stage_id] = ui.label(stage_info["label"]).classes(
                             "text-grey"
                         )
-                        ui.icon("circle", size="sm").classes("text-grey").bind_name_from(
-                            self, f"_stage_icon_{stage_id}"
-                        )
+                        self.stage_icons[stage_id] = ui.icon("circle", size="sm").classes("text-grey")
 
             # Progress bar
             self.progress_bar = ui.linear_progress(value=0).classes("w-full")
@@ -63,15 +62,20 @@ class ProgressView:
         self.current_stage = stage
         self.stages[stage]["status"] = status
 
-        # Update stage label color
+        # Update stage label and icon color
         label = self.stage_labels.get(stage)
-        if label:
+        icon = self.stage_icons.get(stage)
+
+        if label and icon:
             if status == "started":
                 label.classes(remove="text-grey text-green text-red", add="text-blue")
+                icon.classes(remove="text-grey text-green text-red", add="text-blue")
             elif status == "completed":
                 label.classes(remove="text-grey text-blue text-red", add="text-green")
+                icon.classes(remove="text-grey text-blue text-red", add="text-green")
             elif status == "failed":
                 label.classes(remove="text-grey text-blue text-green", add="text-red")
+                icon.classes(remove="text-grey text-blue text-green", add="text-red")
 
     def reset(self):
         """Reset progress view to initial state."""
@@ -82,5 +86,8 @@ class ProgressView:
         for stage_id in self.stages:
             self.stages[stage_id]["status"] = "pending"
             label = self.stage_labels.get(stage_id)
+            icon = self.stage_icons.get(stage_id)
             if label:
                 label.classes(remove="text-blue text-green text-red", add="text-grey")
+            if icon:
+                icon.classes(remove="text-blue text-green text-red", add="text-grey")
