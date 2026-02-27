@@ -58,7 +58,25 @@ jobs:
           cp HexManiacAdvance/src/HexManiac.Core/Models/Code/*.toml resources/
           cp HexManiacAdvance/src/HexManiac.Core/Models/Code/*.txt resources/
           cp HexManiacAdvance/src/HexManiac.Core/Models/Code/*.py resources/
-          ls -la resources/
+
+      - name: Pre-build glossary JSON files
+        run: |
+          PYTHONPATH=src python -c "
+          from meowth.glossary import Glossary
+          from meowth.languages import SUPPORTED_LANGUAGES
+          import json
+          from pathlib import Path
+
+          for target in SUPPORTED_LANGUAGES:
+              if target == 'en':
+                  continue
+              g = Glossary(source_lang='en', target_lang=target)
+              data = {'source_to_target': g.source_to_target}
+              out = Path('resources') / f'glossary_en_{target}.json'
+              out.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding='utf-8')
+              print(f'Generated {out} ({len(g.source_to_target)} terms)')
+          "
+          ls -la resources/glossary_*.json
 
       - name: Get customtkinter path
         id: ctk
@@ -74,6 +92,7 @@ jobs:
             --onedir \
             --add-data "src/meowth:meowth" \
             --add-data "resources:resources" \
+            --add-data "pokeapi/data/v2/csv:pokeapi/data/v2/csv" \
             --add-data "Pokemon_GBA_Font_Patch:Pokemon_GBA_Font_Patch" \
             --add-data "tools:tools" \
             --add-data "src/meowth/binaries/macos/MeowthBridge:meowth/binaries/macos" \
@@ -157,7 +176,26 @@ jobs:
           cp HexManiacAdvance/src/HexManiac.Core/Models/Code/*.toml resources/
           cp HexManiacAdvance/src/HexManiac.Core/Models/Code/*.txt resources/
           cp HexManiacAdvance/src/HexManiac.Core/Models/Code/*.py resources/
-          ls -la resources/
+
+      - name: Pre-build glossary JSON files
+        shell: bash
+        run: |
+          PYTHONPATH=src python -c "
+          from meowth.glossary import Glossary
+          from meowth.languages import SUPPORTED_LANGUAGES
+          import json
+          from pathlib import Path
+
+          for target in SUPPORTED_LANGUAGES:
+              if target == 'en':
+                  continue
+              g = Glossary(source_lang='en', target_lang=target)
+              data = {'source_to_target': g.source_to_target}
+              out = Path('resources') / f'glossary_en_{target}.json'
+              out.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding='utf-8')
+              print(f'Generated {out} ({len(g.source_to_target)} terms)')
+          "
+          ls -la resources/glossary_*.json
 
       - name: Get customtkinter path
         id: ctk
@@ -175,6 +213,7 @@ jobs:
             --onedir \
             --add-data "src/meowth;meowth" \
             --add-data "resources;resources" \
+            --add-data "pokeapi/data/v2/csv;pokeapi/data/v2/csv" \
             --add-data "Pokemon_GBA_Font_Patch;Pokemon_GBA_Font_Patch" \
             --add-data "tools;tools" \
             --add-data "src/meowth/binaries/windows/MeowthBridge.exe;meowth/binaries/windows" \
