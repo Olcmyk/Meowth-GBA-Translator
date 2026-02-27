@@ -47,6 +47,16 @@ def _provider_kwargs(provider, api_base, api_key_env, model) -> dict:
     }
 
 
+def _get_language(cli_value, cli_default, config_key) -> str:
+    """Get language from CLI or config, preferring config if CLI is default."""
+    cfg = _load_config()
+    t = cfg.get("translation", {})
+    # If CLI value is not the default, use it; otherwise use config
+    if cli_value != cli_default:
+        return cli_value
+    return t.get(config_key, cli_default)
+
+
 # Shared CLI options for LLM provider configuration
 _provider_options = [
     click.option("--provider", default=None, type=click.Choice(sorted(PROVIDER_PRESETS.keys()), case_sensitive=False),
@@ -73,10 +83,12 @@ def main():
 @main.command()
 @click.argument("rom_path", type=click.Path(exists=True))
 @click.option("-o", "--output", default="work/texts.json", help="Output texts JSON path")
-@click.option("--source", default="en", help="Source language code (default: en)")
-@click.option("--target", default="zh-Hans", help="Target language code (default: zh-Hans)")
+@click.option("--source", default="en", help="Source language code (default: from config or en)")
+@click.option("--target", default="zh-Hans", help="Target language code (default: from config or zh-Hans)")
 def extract(rom_path, output, source, target):
     """Extract texts from ROM using MeowthBridge."""
+    source = _get_language(source, "en", "source_language")
+    target = _get_language(target, "zh-Hans", "target_language")
     validate_language(source)
     validate_language(target)
     Pipeline.extract_texts(Path(rom_path), Path(output))
@@ -88,12 +100,14 @@ def extract(rom_path, output, source, target):
 @click.option("-o", "--output", default="work/texts_translated.json")
 @click.option("--batch-size", default=30, help="Texts per LLM batch")
 @click.option("--workers", default=10, help="Parallel translation threads")
-@click.option("--source", default="en", help="Source language code (default: en)")
-@click.option("--target", default="zh-Hans", help="Target language code (default: zh-Hans)")
+@click.option("--source", default="en", help="Source language code (default: from config or en)")
+@click.option("--target", default="zh-Hans", help="Target language code (default: from config or zh-Hans)")
 @add_provider_options
 def translate(texts_json, output, batch_size, workers, source, target,
               provider, api_base, api_key_env, model):
     """Translate extracted texts JSON via LLM API."""
+    source = _get_language(source, "en", "source_language")
+    target = _get_language(target, "zh-Hans", "target_language")
     validate_language(source)
     validate_language(target)
     kwargs = _provider_kwargs(provider, api_base, api_key_env, model)
@@ -106,10 +120,12 @@ def translate(texts_json, output, batch_size, workers, source, target,
 @click.argument("rom_path", type=click.Path(exists=True))
 @click.option("--translations", required=True, type=click.Path(exists=True))
 @click.option("-o", "--output", required=True)
-@click.option("--source", default="en", help="Source language code (default: en)")
-@click.option("--target", default="zh-Hans", help="Target language code (default: zh-Hans)")
+@click.option("--source", default="en", help="Source language code (default: from config or en)")
+@click.option("--target", default="zh-Hans", help="Target language code (default: from config or zh-Hans)")
 def build(rom_path, translations, output, source, target):
     """Build translated ROM from translations."""
+    source = _get_language(source, "en", "source_language")
+    target = _get_language(target, "zh-Hans", "target_language")
     validate_language(source)
     validate_language(target)
     pipeline = Pipeline(source_lang=source, target_lang=target)
@@ -120,12 +136,14 @@ def build(rom_path, translations, output, source, target):
 @click.argument("rom_path", type=click.Path(exists=True))
 @click.option("-o", "--output-dir", default="outputs")
 @click.option("--work-dir", default="work")
-@click.option("--source", default="en", help="Source language code (default: en)")
-@click.option("--target", default="zh-Hans", help="Target language code (default: zh-Hans)")
+@click.option("--source", default="en", help="Source language code (default: from config or en)")
+@click.option("--target", default="zh-Hans", help="Target language code (default: from config or zh-Hans)")
 @add_provider_options
 def full(rom_path, output_dir, work_dir, source, target,
          provider, api_base, api_key_env, model):
     """Run full pipeline: extract → translate → build ROM."""
+    source = _get_language(source, "en", "source_language")
+    target = _get_language(target, "zh-Hans", "target_language")
     validate_language(source)
     validate_language(target)
     kwargs = _provider_kwargs(provider, api_base, api_key_env, model)

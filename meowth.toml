@@ -5,7 +5,7 @@
 provider = "deepseek"
 model = "deepseek-chat"
 source_language = "en"
-target_language = "zh-Hans"
+target_language = "es"
 
 [translation.api]
 # Environment variable that holds the API key.
