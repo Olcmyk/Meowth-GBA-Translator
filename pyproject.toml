@@ -3,7 +3,7 @@ requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "meowth-translator"
+name = "meowth"
 version = "0.2.0"
 description = "GBA Pokemon ROM translation tool with CLI and GUI support"
 requires-python = ">=3.10"
