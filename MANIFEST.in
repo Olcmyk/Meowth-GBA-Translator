@@ -1,0 +1,18 @@
+# Include binary files in source distribution
+include src/meowth/binaries/windows/MeowthBridge.exe
+include src/meowth/binaries/macos/MeowthBridge
+include src/meowth/binaries/linux/MeowthBridge
+
+# Include documentation
+include README.md
+include LICENSE
+
+# Include configuration examples
+include meowth.toml.example
+
+# Exclude development files
+exclude .gitignore
+exclude .github/*
+recursive-exclude tests *
+recursive-exclude work *
+recursive-exclude outputs *

@@ -21,3 +21,10 @@ meowth = "meowth.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+meowth = [
+    "binaries/windows/*",
+    "binaries/macos/*",
+    "binaries/linux/*",
+]

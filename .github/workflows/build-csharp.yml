@@ -1,0 +1,163 @@
+name: Build MeowthBridge
+
+on:
+  workflow_call:
+    outputs:
+      artifact-name:
+        description: "Name of the artifacts containing binaries"
+        value: meowth-bridge-binaries
+  workflow_dispatch:
+  push:
+    paths:
+      - 'src/MeowthBridge/**'
+      - '.github/workflows/build-csharp.yml'
+
+jobs:
+  build-windows:
+    name: Build for Windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Build MeowthBridge
+        run: |
+          dotnet publish src/MeowthBridge `
+            -c Release `
+            -r win-x64 `
+            --self-contained true `
+            -p:PublishSingleFile=true `
+            -p:PublishTrimmed=true `
+            -p:IncludeNativeLibrariesForSelfExtract=true `
+            -o build/windows
+
+      - name: Upload Windows binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: meowth-bridge-windows
+          path: build/windows/MeowthBridge.exe
+          retention-days: 7
+
+  build-macos:
+    name: Build for macOS
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Build MeowthBridge (x64)
+        run: |
+          dotnet publish src/MeowthBridge \
+            -c Release \
+            -r osx-x64 \
+            --self-contained true \
+            -p:PublishSingleFile=true \
+            -p:PublishTrimmed=true \
+            -p:IncludeNativeLibrariesForSelfExtract=true \
+            -o build/macos-x64
+
+      - name: Build MeowthBridge (arm64)
+        run: |
+          dotnet publish src/MeowthBridge \
+            -c Release \
+            -r osx-arm64 \
+            --self-contained true \
+            -p:PublishSingleFile=true \
+            -p:PublishTrimmed=true \
+            -p:IncludeNativeLibrariesForSelfExtract=true \
+            -o build/macos-arm64
+
+      - name: Create universal binary
+        run: |
+          mkdir -p build/macos
+          lipo -create \
+            build/macos-x64/MeowthBridge \
+            build/macos-arm64/MeowthBridge \
+            -output build/macos/MeowthBridge
+          chmod +x build/macos/MeowthBridge
+
+      - name: Upload macOS binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: meowth-bridge-macos
+          path: build/macos/MeowthBridge
+          retention-days: 7
+
+  build-linux:
+    name: Build for Linux
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Build MeowthBridge
+        run: |
+          dotnet publish src/MeowthBridge \
+            -c Release \
+            -r linux-x64 \
+            --self-contained true \
+            -p:PublishSingleFile=true \
+            -p:PublishTrimmed=true \
+            -p:IncludeNativeLibrariesForSelfExtract=true \
+            -o build/linux
+
+      - name: Make executable
+        run: chmod +x build/linux/MeowthBridge
+
+      - name: Upload Linux binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: meowth-bridge-linux
+          path: build/linux/MeowthBridge
+          retention-days: 7
+
+  combine-artifacts:
+    name: Combine all binaries
+    runs-on: ubuntu-latest
+    needs: [build-windows, build-macos, build-linux]
+    steps:
+      - name: Download Windows binary
+        uses: actions/download-artifact@v4
+        with:
+          name: meowth-bridge-windows
+          path: binaries/windows
+
+      - name: Download macOS binary
+        uses: actions/download-artifact@v4
+        with:
+          name: meowth-bridge-macos
+          path: binaries/macos
+
+      - name: Download Linux binary
+        uses: actions/download-artifact@v4
+        with:
+          name: meowth-bridge-linux
+          path: binaries/linux
+
+      - name: List binaries
+        run: |
+          echo "=== Windows ==="
+          ls -lh binaries/windows/
+          echo "=== macOS ==="
+          ls -lh binaries/macos/
+          echo "=== Linux ==="
+          ls -lh binaries/linux/
+
+      - name: Upload combined binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: meowth-bridge-binaries
+          path: binaries/
+          retention-days: 30

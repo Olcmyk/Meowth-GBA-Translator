@@ -1,0 +1,7 @@
+# Placeholder for Linux binary
+# The actual MeowthBridge will be placed here during the build process
+# by GitHub Actions or manual compilation.
+
+To build manually:
+  dotnet publish src/MeowthBridge -c Release -r linux-x64 --self-contained -p:PublishSingleFile=true -o src/meowth/binaries/linux
+  chmod +x src/meowth/binaries/linux/MeowthBridge

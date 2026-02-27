@@ -1,0 +1,12 @@
+# Placeholder for macOS binary
+# The actual MeowthBridge will be placed here during the build process
+# by GitHub Actions or manual compilation.
+
+To build manually:
+  # For x64
+  dotnet publish src/MeowthBridge -c Release -r osx-x64 --self-contained -p:PublishSingleFile=true -o build/macos-x64
+  # For arm64
+  dotnet publish src/MeowthBridge -c Release -r osx-arm64 --self-contained -p:PublishSingleFile=true -o build/macos-arm64
+  # Create universal binary
+  lipo -create build/macos-x64/MeowthBridge build/macos-arm64/MeowthBridge -output src/meowth/binaries/macos/MeowthBridge
+  chmod +x src/meowth/binaries/macos/MeowthBridge

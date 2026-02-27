@@ -1,0 +1,83 @@
+name: Publish to PyPI
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      test-pypi:
+        description: 'Publish to TestPyPI instead of PyPI'
+        required: false
+        type: boolean
+        default: true
+
+jobs:
+  build-binaries:
+    name: Build C# binaries
+    uses: ./.github/workflows/build-csharp.yml
+
+  build-and-publish:
+    name: Build and publish Python package
+    runs-on: ubuntu-latest
+    needs: build-binaries
+    permissions:
+      id-token: write  # Required for trusted publishing
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install build twine
+
+      - name: Download compiled binaries
+        uses: actions/download-artifact@v4
+        with:
+          name: meowth-bridge-binaries
+          path: src/meowth/binaries/
+
+      - name: Verify binaries
+        run: |
+          echo "=== Checking downloaded binaries ==="
+          ls -lhR src/meowth/binaries/
+          echo ""
+          echo "=== Windows binary ==="
+          file src/meowth/binaries/windows/MeowthBridge.exe || echo "Windows binary not found"
+          echo ""
+          echo "=== macOS binary ==="
+          file src/meowth/binaries/macos/MeowthBridge || echo "macOS binary not found"
+          echo ""
+          echo "=== Linux binary ==="
+          file src/meowth/binaries/linux/MeowthBridge || echo "Linux binary not found"
+
+      - name: Make binaries executable
+        run: |
+          chmod +x src/meowth/binaries/macos/MeowthBridge || true
+          chmod +x src/meowth/binaries/linux/MeowthBridge || true
+
+      - name: Build package
+        run: python -m build
+
+      - name: Check package contents
+        run: |
+          echo "=== Package contents ==="
+          tar -tzf dist/*.tar.gz | grep -E "(MeowthBridge|binaries)" || echo "No binaries found in source distribution"
+          unzip -l dist/*.whl | grep -E "(MeowthBridge|binaries)" || echo "No binaries found in wheel"
+
+      - name: Publish to TestPyPI
+        if: github.event_name == 'workflow_dispatch' && inputs.test-pypi
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          skip-existing: true
+
+      - name: Publish to PyPI
+        if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && !inputs.test-pypi)
+        uses: pypa/gh-action-pypi-publish@release/v1

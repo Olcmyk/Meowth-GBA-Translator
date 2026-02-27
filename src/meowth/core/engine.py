@@ -370,12 +370,8 @@ class TranslationEngine:
     @staticmethod
     def find_meowth_bridge() -> Path:
         """Locate the MeowthBridge executable."""
-        base = Path(__file__).parent.parent.parent / "MeowthBridge" / "bin"
-        for profile in ("Release", "Debug"):
-            exe = base / profile / "net8.0" / "MeowthBridge"
-            if exe.exists():
-                return exe
-        raise FileNotFoundError(Messages.MEOWTH_BRIDGE_NOT_FOUND)
+        from ..binaries import find_meowth_bridge
+        return find_meowth_bridge()
 
     @staticmethod
     def extract_texts(rom_path: Path, output_path: Path) -> Path:
