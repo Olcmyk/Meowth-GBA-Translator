@@ -18,6 +18,7 @@ gui = ["nicegui>=1.4.0"]
 
 [project.scripts]
 meowth = "meowth.cli:main"
+meowth-gui = "meowth.gui:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
