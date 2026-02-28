@@ -377,25 +377,36 @@ class TranslationEngine:
     @staticmethod
     def extract_texts(rom_path: Path, output_path: Path) -> Path:
         """Extract texts from ROM using MeowthBridge."""
+        import os
         exe = TranslationEngine.find_meowth_bridge()
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        result = subprocess.run(
-            [str(exe), "extract", str(rom_path), "-o", str(output_path)],
-            capture_output=True, text=True,
-        )
-        if result.returncode != 0:
-            raise RuntimeError(
-                Messages.MEOWTH_BRIDGE_FAILED.format(
-                    code=result.returncode, stderr=result.stderr
-                )
+
+        # Change to output directory so MeowthBridge creates work/ there
+        original_cwd = Path.cwd()
+        work_parent = output_path.parent.parent  # output_path is work_dir/texts.json, so parent.parent is writable base
+        os.chdir(work_parent)
+
+        try:
+            result = subprocess.run(
+                [str(exe), "extract", str(rom_path), "-o", str(output_path)],
+                capture_output=True, text=True,
             )
-        # MeowthBridge hardcodes output to work/text.json
-        hardcoded = Path("work/text.json")
-        if not output_path.exists() and hardcoded.exists():
-            import shutil
-            shutil.move(str(hardcoded), str(output_path))
-        if not output_path.exists():
-            raise RuntimeError(Messages.MEOWTH_BRIDGE_NO_OUTPUT.format(path=output_path))
+            if result.returncode != 0:
+                raise RuntimeError(
+                    Messages.MEOWTH_BRIDGE_FAILED.format(
+                        code=result.returncode, stderr=result.stderr
+                    )
+                )
+            # MeowthBridge hardcodes output to work/text.json
+            hardcoded = Path("work/text.json")
+            if not output_path.exists() and hardcoded.exists():
+                import shutil
+                shutil.move(str(hardcoded), str(output_path))
+            if not output_path.exists():
+                raise RuntimeError(Messages.MEOWTH_BRIDGE_NO_OUTPUT.format(path=output_path))
+        finally:
+            os.chdir(original_cwd)
+
         _postprocess_fd_macros(output_path)
         return output_path
 
