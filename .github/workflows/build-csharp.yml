@@ -32,6 +32,7 @@ jobs:
             -c Release `
             -r win-x64 `
             --self-contained true `
+            -p:PublishTrimmed=false `
             -o build/windows
 
       - name: Upload Windows binary
@@ -60,6 +61,7 @@ jobs:
             -c Release \
             -r osx-x64 \
             --self-contained true \
+            -p:PublishTrimmed=false \
             -o build/macos-x64
 
       - name: Build MeowthBridge (arm64)
@@ -68,6 +70,7 @@ jobs:
             -c Release \
             -r osx-arm64 \
             --self-contained true \
+            -p:PublishTrimmed=false \
             -o build/macos-arm64
 
       - name: Create universal binary
@@ -108,6 +111,7 @@ jobs:
             -c Release \
             -r linux-x64 \
             --self-contained true \
+            -p:PublishTrimmed=false \
             -o build/linux
 
       - name: Make executable

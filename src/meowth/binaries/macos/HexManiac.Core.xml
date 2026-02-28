@@ -1,0 +1,1710 @@
+<?xml version="1.0"?>
+<doc>
+    <assembly>
+        <name>HexManiac.Core</name>
+    </assembly>
+    <members>
+        <member name="T:HavenSoft.HexManiac.Core.AutoDictionary`2">
+            <summary>
+            If used as AutoDictionary or IDictionary,
+            requesting a value from an unused key will create and add a default value.
+            Casting to a Dictionary will act like a Dictionary.
+            Contains and TryGet still work the normal way.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.AutoDictionary`2.#ctor(System.Func{`0,`1})">
+            <param name="factory">A method for creating a new value based on a key.</param>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.ViewModels.QuickEditItems.AddTilesetAnimation.SanitizeName(HavenSoft.HexManiac.Core.ViewModels.IViewPort,System.String)">
+            <summary>
+            Remove all special characters, spaces, etc
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.ViewModels.QuickEditItems.MakePokemonExpandable.UpdatePlayCryInternal(HavenSoft.HexManiac.Core.ViewModels.IEditableViewPort,HavenSoft.HexManiac.Core.Models.ModelDelta)">
+            <summary>
+            PlayCryInternal has a switch-statement at the end that limits the number of pokemon to 512 (128*4).
+            We can rewrite that function to remove the limit and simplify the code.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.ViewModels.QuickEditItems.MakePokemonExpandable.UpdatePokedexFlagsCode(HavenSoft.HexManiac.Core.ViewModels.IEditableViewPort,HavenSoft.HexManiac.Core.Models.ModelDelta)">
+             <summary>
+             The save file needs to save 1 bit per pokemon to know if it's been caught, and another bit to know if it's been seen.
+             These are stored in two arrays in SaveBlock2.
+             We want to extend the space allocated for each of those arrays to allow for more pokemon.
+            
+             This function updates ClearPokedexFlags and sub_8104AB0 to use the new expanded arrays.
+             These 0x200 bytes for caught and 0x200 for seen, meaning you can have up to 4096 pokemon without running out of flags.
+             </summary>
+        </member>
+        <member name="T:HavenSoft.HexManiac.Core.ViewModels.QuickEditItems.MakeTmsExpandable">
+             <summary>
+             The default implementation of converting a TM item ID to a TM move ID is to use an item offset.
+             This means that all the TM and HM moves are stored in a single list, and all the TM/HM items must be sequential.
+            
+             MakingTmsExpandable will change the implementation to be based on item names instead.
+             So 'TM30' will use the 30th move in the tmmove table, no matter which item number it is.
+             To make this work for arbitrary numbers of TMs and HMs, HM moves/compatibility are split out into a separate table.
+             This requires updating 2 tables and 6 functions.
+             </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.ViewModels.QuickEditItems.MakeTmsExpandable.SplitTmsHms(HavenSoft.HexManiac.Core.ViewModels.ViewPort)">
+            <summary>
+            Before we do any code changes, split the TMs and HMs into two separate lists.
+            </summary>
+        </member>
+        <member name="T:HavenSoft.HexManiac.Core.ViewModels.ChangeHistory`1">
+            <summary>
+            Represents a history of changes that can undo / redo.
+            The change can be reperesented by any class with an empty constructor.
+            New change objects will be created automatically as needed.
+            The user is responsible for using the change object to revert a change via the constructor delegate call.
+            The user is responsible for converting from a backward change object to a forward change (redo) object.
+            The user is responsible for assigning boundaries between changes by calling ChangeCompleted.
+            </summary>
+            <remarks>
+            Aside from undo/redo, the ChangeHistory can also track whether the file has been changed since the last save.
+            However, since ChangeHistory is not responsible for saving, you have to tell it whenever the data is saved.
+            This is accomplished via the TagAsSaved() method.
+            </remarks>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.ViewModels.ChangeHistory`1.InsertCustomChange(`0)">
+            <summary>
+            Inserts a custom change token into the undo stack.
+            Any in-progress changes are considered complete.
+            Calling for CurrentChange or ChangeComplete will complete this custom token.
+            Returns the new in-progress change token, which you can use for your custom change.
+            </summary>
+        </member>
+        <member name="T:HavenSoft.HexManiac.Core.ViewModels.ChildViewPort">
+            <summary>
+             exactly replaces a ViewPort, except that it also has a known parent view
+            </summary>
+        </member>
+        <member name="T:HavenSoft.HexManiac.Core.ViewModels.ConvertCellToText">
+            <summary>
+            Given a data format, decide how to best display that as text
+            </summary>
+        </member>
+        <member name="T:HavenSoft.HexManiac.Core.ViewModels.DataFormats.Undefined">
+            <summary>
+            Used for locations where there is no data.
+            As in the location is out of range of the file.
+            </summary>
+        </member>
+        <member name="T:HavenSoft.HexManiac.Core.ViewModels.DataFormats.None">
+            <summary>
+            Used for locations where the format is unknown, or the data is unused.
+            Basically everything is 'None' unless we have special information about it.
+            </summary>
+        </member>
+        <member name="T:HavenSoft.HexManiac.Core.ViewModels.DataFormats.StreamEndDecorator">
+            <summary>
+            Represents a token that can be changed into an end-of-stream character for a TableStream with an explicit End token.
+            End-of-stream tokens are always represented as []
+            </summary>
+        </member>
+        <member name="T:HavenSoft.HexManiac.Core.ViewModels.EditItemWrapper">
+            <summary>
+            Gives all QuickEditItem's an extra check at the end to make sure that they didn't leave the model in a bad state.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.ViewModels.IDataModelExtensions.GetExtendedAutocompleteOptions(HavenSoft.HexManiac.Core.Models.IDataModel,System.String)">
+            <summary>
+            Returns a list of autocomplete options, based on the current Text.
+            If there are very few options and there are no / characters, this also looks for elements with those names.
+            This allows the user to get results when searching for "charizard" or "brock"
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.ViewModels.ImageEditorViewModel.RaiseRefreshSelection(HavenSoft.HexManiac.Core.Models.Point[])">
+            <param name="toSelect">Points range from (0,0) to (PixelWidth, PixelHeight) </param>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.ViewModels.ImageEditorViewModel.ColorIndex(System.Int32,System.Int32,HavenSoft.HexManiac.Core.ViewModels.ImageEditorViewModel.PaletteCache)">
+            <summary>
+            Given an index of a color within a palette page, get the pixel value that contains both the page and index information.
+            If no page is given, the current selected page is used.
+            Tilesets don't tie pixels to specific palettes, so just nop.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.ViewModels.ImageEditorViewModel.PaletteIndex(System.Int32,System.Int32,HavenSoft.HexManiac.Core.ViewModels.ImageEditorViewModel.PaletteCache)">
+            <summary>
+            Given a pixel including a palette page and color index, return just the index within that palette page (assuming the selected page).
+            Tilesets don't tie pixels to specific palettes, so just nop.
+            </summary>
+        </member>
+        <member name="T:HavenSoft.HexManiac.Core.ViewModels.ITabContent">
+            <summary>
+            Each command expects an IFileSystem as its Command Parameter.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.ViewModels.Map.BlockMapViewModel.GetBlock(System.Double,System.Double)">
+            <summary>
+            Gets the block index and collision index.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.ViewModels.Map.BlockMapViewModel.DrawBlock(HavenSoft.HexManiac.Core.Models.ModelDelta,System.Int32,System.Int32,System.Double,System.Double)">
+            <summary>
+            If collisionIndex is not valid, it's ignored.
+            If blockIndex is not valid, it's ignored.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.ViewModels.Map.BlockMapViewModel.PaintWaveFunction(HavenSoft.HexManiac.Core.Models.ModelDelta,System.Double,System.Double,System.Func{System.Int32,System.Int32,HavenSoft.HexManiac.Core.ViewModels.Map.WaveCell},System.Threading.CancellationToken)">
+            <param name="wave">A function that, for a given x/y pair, returns a superposition of possible block probabilities for that cell, based on its known neighbors.</param>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.ViewModels.Map.BlockMapViewModel.RemoveMatchedConnection(HavenSoft.HexManiac.Core.Models.ModelDelta,System.Int32,System.Int32,HavenSoft.HexManiac.Core.ViewModels.Map.MapDirection)">
+            <summary>
+            Remove only this specific connection, because it's pair is being removed.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.ViewModels.Map.BlockMapViewModel.GotoAddress(HavenSoft.HexManiac.Core.ViewModels.IEditableViewPort,System.Int32)">
+            <summary>
+            Wrapper around standard viewPort.Goto that also formats the script when you do the goto.
+            </summary>
+        </member>
+        <member name="F:HavenSoft.HexManiac.Core.ViewModels.Map.Flags.RS_ThumbVars">
+            <summary>
+            Some vars are not used in scripts, but are used in thumb code.
+            We need to remember these vars explicitly.
+            </summary>
+        </member>
+        <member name="F:HavenSoft.HexManiac.Core.ViewModels.Map.Flags.FRLG_ThumbVars">
+            <summary>
+            Some vars are not used in scripts, but are used in thumb code.
+            We need to remember these vars explicitly.
+            </summary>
+        </member>
+        <member name="F:HavenSoft.HexManiac.Core.ViewModels.Map.Flags.Emerald_ThumbVars">
+            <summary>
+            Some vars are not used in scripts, but are used in thumb code.
+            We need to remember these vars explicitly.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.ViewModels.Map.Flags.GetUsedItemFlags(HavenSoft.HexManiac.Core.Models.IDataModel,HavenSoft.HexManiac.Core.Models.Code.ScriptParser)">
+            <summary>
+            IDs of every used flag
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.ViewModels.Map.Flags.FindFlagUsages(HavenSoft.HexManiac.Core.Models.IDataModel,HavenSoft.HexManiac.Core.Models.Code.ScriptParser,System.Int32)">
+            <returns>Every address where this flag is used</returns>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.ViewModels.Map.Flags.GetAllFlagContext(HavenSoft.HexManiac.Core.Models.IDataModel,HavenSoft.HexManiac.Core.Models.Code.ScriptParser)">
+            <summary>
+            Instead of just finding out which flags are used,
+            this method attempts to find all the context for each flag.
+            Any flag in this dictionary is used at least once by a header, object, script, or signpost.
+            You can check the flag to see info about what calls it.
+            * The exact address that uses the flag
+            * the Bank/Map that uses the flag, as well as the event type and index
+            * For header scripts, the type of script that uses it
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.ViewModels.Map.Flags.GetPokemonDevolutions(HavenSoft.HexManiac.Core.Models.IDataModel)">
+            <summary>
+            For a given pokemon, find what pokemon (if any evolves into it)
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.ViewModels.Map.Flags.GetAllEvents(HavenSoft.HexManiac.Core.Models.IDataModel,System.String)">
+            <param name="type">Expects "objects" "scripts" or "signposts"</param>
+            <returns></returns>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.ViewModels.Map.FlyEventViewModel.Delete">
+            <returns>true if the event was deleted</returns>
+        </member>
+        <member name="P:HavenSoft.HexManiac.Core.ViewModels.Map.ObjectEventViewModel.HasKind">
+            <summary>
+            FireRed Only.
+            Kind is either 0 or 255.
+            If it's 255, then this is an 'offscreen' object, which is a copy of an object in a connected map.
+            The trainerType and trainerRangeOrBerryID have the map and bank information, respectively.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.ViewModels.Map.ObjectEventViewModel.Render(HavenSoft.HexManiac.Core.Models.IDataModel,HavenSoft.HexManiac.Core.Models.ModelTable,HavenSoft.HexManiac.Core.ViewModels.Images.IPixelViewModel,System.Int32,System.Int32,System.Func{System.Int32})">
+            <param name="facing">(0, 1, 2, 3) = (down, up, left, right)</param>
+        </member>
+        <member name="T:HavenSoft.HexManiac.Core.ViewModels.Map.MapEditorViewModel">
+            <summary>
+            Represents the entire map editor tab, with all visible controls, maps, edit boxes, etc
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.ViewModels.Map.MapEditorViewModel.UpdateHover(HavenSoft.HexManiac.Core.ViewModels.Map.BlockMapViewModel,System.Int32,System.Int32,System.Int32,System.Int32)">
+            <summary>
+            returns true if the hover changed
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.ViewModels.Map.MapEditorViewModel.ResetFromRectangleBackup">
+            <summary>
+            Use the values of drawSource and lastDraw to fill the map from the backup
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.ViewModels.Map.MapEditorViewModel.FillBackup">
+            <summary>
+            Use the values of drawSource and lastDraw to fill the backup from the current map
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.ViewModels.Map.MapEditorViewModel.FillRect">
+            <summary>
+            Fill the map from drawSource, lastDraw, drawBlockIndex, drawCollisionIndex, and tilesToDraw
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.ViewModels.Map.MapEditorViewModel.GetMapPreview(System.Int32,System.Int32,System.Nullable{System.Int32})">
+            <param name="desiredBlockWidth">If you pass null, no scaling will be performed.</param>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.ViewModels.Map.MapRepointer.AddNewMapToBank(System.Int32)">
+            <summary>
+            Expands the chosen map bank by one, adding a new map to the end.
+            </summary>
+            <returns>The table that contains the new map.</returns>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.ViewModels.Map.MapRepointer.CreateNewMap(HavenSoft.HexManiac.Core.Models.ModelDelta)">
+            <summary>
+            Inserts a new map using the current map's layout.
+            Creates event data with 0 events, map scripts data with 0 scripts, and connection data with 0 connections.
+            Copies all the flags/header from the current map.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.ViewModels.Map.MapRepointer.CreateNewLayout(HavenSoft.HexManiac.Core.Models.ModelDelta)">
+            <summary>
+            Creates a new layout using the existing layout's borderblock, blockmap, primary blockset, and secondary blockset.
+            Once this new layout is assigned to a map, you'll want to update that map's layout ID by calling BlockMapViewModel.UpdateLayoutID()
+            </summary>
+        </member>
+        <member name="T:HavenSoft.HexManiac.Core.ViewModels.Map.MapSubScriptViewModel">
+            <summary>
+            Represents an indivdual map script from a map script table (type 2 or type 4).
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.ViewModels.ScrollRegion.ScrollToPoint(HavenSoft.HexManiac.Core.Models.Point@)">
+            <summary>
+            Scrolls the view, changing the ScrollValue and DataIndex, so that the provided point comes into view.
+            If scrolling is required, the method returns true and the point argument is adjusted based on the scrolling.
+            If scrolling is not required, the method returns false.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.ViewModels.ScrollRegion.CalculateEffectiveDataLength(System.Int32)">
+            <summary>
+            If the data is offset in a strange way, there may be some blank spaces we have
+            to display at the start of the data. The 'effective data length' is the length
+            of whatever actual data we have, plus the extra blank space on the first row.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.ViewModels.SearchResultsViewPort.GetChildLine(System.Int32)">
+            <param name="y">0 is the first line in the view</param>
+            <returns>
+            Which child (and which line of that child) should be used to represent the y-line in the view,
+            based on scrolling in the overall search results and within each individual result.
+            </returns>
+        </member>
+        <member name="E:HavenSoft.HexManiac.Core.ViewModels.Selection.PreviewSelectionStartChanged">
+            <summary>
+            The owner may have something special going on with the selected point.
+            Warn the owner before the selection changes, in case they need to do cleanup.
+            Note that this function is expected to pass the _old_ selection value
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.ViewModels.Selection.ChangeWidth(System.Int32)">
+            <summary>
+            Changing the scrollregion's width visibly moves the selection.
+            But if we updated the selection using SelectionStart and SelectionEnd, it would auto-scroll.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.ViewModels.Selection.ShiftSelectionFromScroll(System.Int32)">
+            <summary>
+            When the scrolling changes, the selection has to move as well.
+            This is because the selection is in terms of the viewPort, not the overall data.
+            Nothing in this method notifies because any amount of scrolling means we already need a complete redraw.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.ViewModels.Tools.BatchObservableCollection`1.CreateSilentBatch">
+            <summary>
+            Creates a batch change operation that doesn't notify upon completion.
+            Any batches wrapped within this batch won't notify.
+            </summary>
+        </member>
+        <member name="P:HavenSoft.HexManiac.Core.ViewModels.Tools.CodeBody.CanFindUses">
+            <summary>
+            true if the user right-clicked on a variable or flag
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.ViewModels.Tools.CodeTool.UpdateContents(System.Int32,HavenSoft.HexManiac.Core.Models.Code.ScriptParser,System.Int32,System.Int32)">
+            <summary>
+            Update all the content objects.
+            If one of the content objects is the one being changed, don't update that one.
+            </summary>
+            <param name="start"></param>
+            <param name="currentScriptStart"></param>
+        </member>
+        <member name="T:HavenSoft.HexManiac.Core.ViewModels.Tools.ComboOption">
+            <summary>
+            This exists to wrap a string, just so that WPF doesn't mess up the combo-box selection in the case of multiple indexes having the same text.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.ViewModels.Tools.PaletteCollection.#ctor(HavenSoft.HexManiac.Core.ViewModels.IRaiseMessageTab,HavenSoft.HexManiac.Core.Models.IDataModel,HavenSoft.HexManiac.Core.ViewModels.ChangeHistory{HavenSoft.HexManiac.Core.Models.ModelDelta})">
+            <summary>
+            Create a palette collection that's tied to data in a model.
+            This collection can pull/push data from the model, raise notifications, and supports undo/redo.
+            </summary>
+            <param name="tab"></param>
+            <param name="model"></param>
+            <param name="history"></param>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.ViewModels.Tools.PaletteCollection.#ctor">
+            <summary>
+            Create a palette collection that holds spare colors.
+            This collection is not tied to the model.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.ViewModels.Tools.PaletteCollection.SingleSelect">
+            <summary>
+            If multiple colors are selected, reduce to just a single color selected.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.ViewModels.Tools.PaletteElementViewModel.TryCopy(HavenSoft.HexManiac.Core.ViewModels.Tools.PagedElementViewModel)">
+            <summary>
+            Note that this method runs _before_ changes are copied from the baseclass
+            So if we want to update colors based on the new start point,
+            Then UpdateColors can't rely on our internal start point
+            </summary>
+        </member>
+        <member name="F:HavenSoft.HexManiac.Core.ViewModels.Tools.PCSTool.ignoreSelectionUpdates">
+            <summary>
+            If a selection update is requested due to a change in the Content, ignore it.
+            Otherwise, the selection update could send us back to the begining of the run.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.ViewModels.Tools.SpriteElementViewModel.TryCopy(HavenSoft.HexManiac.Core.ViewModels.Tools.PagedElementViewModel)">
+            <summary>
+            Note that this method runs _before_ changes are copied from the baseclass
+            So if we want to update tiles based on the new start point,
+            Then UpdateColors can't rely on our internal start point
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.ViewModels.Tools.SpriteElementViewModel.GetDesiredPalette(System.Int32,System.Int32,System.Boolean,HavenSoft.HexManiac.Core.Models.Runs.Sprites.PaletteFormat@)">
+            <summary>
+            If the hint is a table name, only match palettes from that table.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.ViewModels.Tools.SpriteElementViewModel.TryGetPaletteFromComboBoxInMatchingTable(System.Int32,HavenSoft.HexManiac.Core.ViewModels.Tools.ComboBoxArrayElementViewModel,System.Int32,System.Collections.Generic.IReadOnlyList{System.Int16}@)">
+            <summary>
+            If the hint-name matches the name of a table of a combobox also loaded as a parallel table,
+            then there isn't a 1-to-1 mapping between sprites and palettes.
+            Instead, each sprite has an index (from the combobox) that matches a palette.
+            In this case, the combobox will know which list of palettes it's pulling from.
+            </summary>
+        </member>
+        <member name="P:HavenSoft.HexManiac.Core.ViewModels.Tools.TileViewModel.Palette">
+            <summary>
+            Encoded as 5,6,5 bits for r,g,b
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.ViewModels.Tools.SpriteTool.TryReorderPalettesFromMatchingSprite(System.Collections.Generic.IReadOnlyList{System.Int16}[],System.Int16[],System.Int32[0:,0:])">
+            <summary>
+            Given a set of indexed pixels and a new image,
+            Edit a palette to be equal to the colors needed to map
+            the indexed pixels into the new image.
+            Note that if the image doesn't fit the indexed pixels, this method will return the pixels that caused the failure.
+            This method will return (-1, -1) if some other issue is encountered, and return (width, height) if everything worked.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.ViewModels.Tools.WeightedPalette.Weigh(System.Int32[0:,0:],System.Collections.Generic.IReadOnlyList{System.Int16}[],System.Int32,System.Int32)">
+            <summary>
+            Build a set of weighted palettes from a sprite that uses a set fo palettes.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.ViewModels.Tools.WeightedPalette.MergeLists(System.Collections.Generic.IReadOnlyList{HavenSoft.HexManiac.Core.ViewModels.Tools.WeightedPalette},System.Collections.Generic.IReadOnlyList{HavenSoft.HexManiac.Core.ViewModels.Tools.WeightedPalette})">
+            <summary>
+            Given two sets of n palettes, merge them into a single set of n palettes
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.ViewModels.Tools.WeightedPalette.Update(HavenSoft.HexManiac.Core.Models.IDataModel,HavenSoft.HexManiac.Core.Models.ModelDelta,HavenSoft.HexManiac.Core.Models.Runs.Sprites.ISpriteRun,System.Collections.Generic.IReadOnlyList{System.Int16}[],System.Collections.Generic.IReadOnlyList{System.Int16}[],System.Int32,System.Int32)">
+            <summary>
+            Update a sprite to use a new palette
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.ViewModels.Tools.WeightedPalette.Reduce(System.Int16[],System.Int32)">
+            <summary>
+            Creates a WeightedPalette from a non-indexed tile
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.ViewModels.Tools.WeightedPalette.Reduce(System.Collections.Generic.IList{HavenSoft.HexManiac.Core.ViewModels.Tools.ColorMass},System.Int32,System.Double@)">
+            <summary>
+            Reduces a number of colors to a target length or shorter, and reports how much force was needed to do it.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.ViewModels.Tools.ColorMass.op_Addition(HavenSoft.HexManiac.Core.ViewModels.Tools.ColorMass,HavenSoft.HexManiac.Core.ViewModels.Tools.ColorMass)">
+            <summary>
+            Returns a new color mass that accounts for the positions/masses of the original two.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.ViewModels.Tools.ColorMass.op_Multiply(HavenSoft.HexManiac.Core.ViewModels.Tools.ColorMass,HavenSoft.HexManiac.Core.ViewModels.Tools.ColorMass)">
+            <summary>
+            Returns an inverse gravity factor, accounting for the distance/mass between the two color masses.
+            Smaller numbers mean that it's a smaller change to merge the two. Larger numbers mean merging them should be avoided.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.ViewModels.Tools.TableTool.AddDummyGroup">
+            <summary>
+            This extra group is added just to make the single tables look right in the table tool.
+            </summary>
+        </member>
+        <member name="T:HavenSoft.HexManiac.Core.ViewModels.ICanSilencePropertyNotifications">
+            <summary>
+            Represents a superset of property notifiers
+            with functionality to temporarily turn notifications off.
+            This makes them less noisy in situations where a massive number of notifications are happening.
+            </summary>
+        </member>
+        <member name="T:HavenSoft.HexManiac.Core.ViewModels.ViewModelCore">
+            <summary>
+            Utility base-class that adds the PropertyChanged event and adds protected methods to simplify calling it.
+            It also adds protected methods to simplify the creation of commands.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.ViewModels.ViewModelCore.NotifyPropertyChanged``1(``0,System.String)">
+            <summary>
+            The oldValue will not be stored / notified if we're deferring property notifications
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.ViewModels.ViewModelCore.TryUpdate``1(``0@,``0,System.String)">
+            <summary>
+            Utility function to make writing property updates easier.
+            If the backing field's value does not match the new value, the backing field is updated and PropertyChanged gets called.
+            </summary>
+            <typeparam name="T">The type of the property being updated.</typeparam>
+            <param name="backingField">A reference to the backing field of the property being changed.</param>
+            <param name="newValue">The new value for the property.</param>
+            <param name="propertyName">The name of the property to notify on. If the property is the caller, the compiler will figure this parameter out automatically.</param>
+            <returns>false if the data did not need to be updated, true if it did.</returns>
+        </member>
+        <member name="T:HavenSoft.HexManiac.Core.ViewModels.ViewPort">
+            <summary>
+            A range of visible data that should be displayed.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.ViewModels.ViewPort.CascadeScripts">
+            <summary>
+            Top-level scripts may be available through metadata.
+            Find scripts called by those scripts, and add runs for those too.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.ViewModels.ViewPort.Edit(System.String)">
+            <summary>
+            The primary Edit method.
+            If the edit is large, this will create a loading bar that runs from 0 to 100%,
+            with parts of the edit split off to happen over time.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.ViewModels.ViewPort.Edit(System.String,System.Double,System.Double)">
+            <summary>
+            A separate Edit method that assumes that the edit is part of a larger operation.
+            The loading bar will still be cleared after the edit, just in case.
+            But this messes with how the loading bar will fill.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.ViewModels.ViewPort.RepointWithoutRun(System.Int32,System.Int32)">
+            <summary>
+            Sometimes, valid data exists in the game but no run could be added.
+            In such cases, it could be because a conflict was detected between 2 runs in the data.
+            Make a new copy of data, only if we can prove that the data is valid and only if no run is found.
+            Leave the original data (and other pointers to it) untouched.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.ViewModels.ViewPort.FindMatchingDataResultsFromArrayElement(HavenSoft.HexManiac.Core.Models.Runs.ArrayRun,System.Int32)">
+            <summary>
+            When performing a search, sometimes one of the search results is text from a table.
+            If so, then we also care about places where that table value is used.
+            This function finds uses of an element in a table.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.ViewModels.ViewPort.TryGeneralCompleteEdit(System.String,HavenSoft.HexManiac.Core.Models.Point,System.Boolean@)">
+            <summary>
+            Some edits are valid no matter where you are in the data.
+            Try to complete one of those edits here.
+            Return true if it's a special edit. Result is true if the edit was completed.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.ViewModels.ViewPort.ExecuteMetacommand(System.String)">
+            <summary>
+            Current Available metacommands:
+            lz(1024) -> write 1024 compressed bytes. Error if we're not in freespace, do nothing if we're at lz data of the expected length already.
+            00(32)   -> Write 32 bytes of zero. Error if we're not in freespace (FF).
+                        * Does not error if clearing a subset (or entire) table, so long as the clear matches a multiple of a row length. Still clears that data though.
+                        * Does not error if clearing exactly the length of a non-table run. Don't clear the data either: all 0's may not be valid (such as with strings)
+            FF(0x20) -> Write 0x20 bytes of FF. Errors if there's any metadata. Used for deleting unused bytes.
+            put(1234)-> put the bytes 12, then 34, at the current location, but don't change the current selection.
+                        works no matter what the current data is.
+            importimage(path, greedy) -> imports over the current sprite (or pointer to sprite) using cautious, greedy, or smart.
+                                         Path is relative to the current rom, unless loading from an .hma file.
+            exportimage(path) -> exports an image
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.ViewModels.ViewPort.CompleteAnchorEdit(HavenSoft.HexManiac.Core.Models.Point)">
+            <returns>True if it was completed successfully, false if some sort of error occurred and we should abort the remainder of the edit.</returns>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.ViewModels.ViewPort.UpdateSelectionWithoutNotify(HavenSoft.HexManiac.Core.Models.Point)">
+            <summary>
+            When automatically updating the selection,
+            update it without notifying ourselves.
+            This lets us tell the difference between a manual cell change and an auto-cell change,
+            which is useful for deciding change history boundaries.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.ViewModels.Visitors.CompleteCellEdit.ValidatePlmText(HavenSoft.HexManiac.Core.Models.Runs.PLMRun,System.Int32,System.Int32@,System.Int32@)">
+            <summary>
+            Parses text in a PLM run to get the level and move.
+            returns an error string if the parse fails.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.ViewModels.Visitors.CompleteCellEdit.ParseDestination(System.String)">
+            <summary>
+            Reads the user's text and current context to decide the destination for a new pointer.
+            Can set ErrorText if there is an error in this process.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.ViewModels.Visitors.CompleteCellEdit.WriteNormalEggEdit(HavenSoft.HexManiac.Core.Models.Runs.EggMoveRun,System.Int32)">
+            <summary>
+            Before we write this change to the model, see if we need to extend the egg run to make it fit.
+            </summary>
+        </member>
+        <member name="T:HavenSoft.HexManiac.Core.ViewModels.Visitors.CompositeContextItem">
+            <summary>
+            Displays a set of contex items inline
+            </summary>
+        </member>
+        <member name="T:HavenSoft.HexManiac.Core.ViewModels.Visitors.ContextItemGroup">
+            <summary>
+            Displays a single context item that has a submenu
+            </summary>
+        </member>
+        <member name="T:HavenSoft.HexManiac.Core.ViewModels.Visitors.ContinueCellEdit">
+            <summary>
+            An an existing UnderEdit element is trying to be edited.
+            This object just needs to set Result to true if the Input is valid for the given cell.
+            </summary>
+        </member>
+        <member name="T:HavenSoft.HexManiac.Core.ViewModels.Visitors.DataClear">
+            <summary>
+            How we clear data depends on what type of data we're clearing.
+            For example, cleared pointers get replaced with NULL (0x00000000).
+            For example, cleared data with no known format gets 0xFF.
+            </summary>
+        </member>
+        <member name="T:HavenSoft.HexManiac.Core.ViewModels.Visitors.StartCellEdit">
+            <summary>
+            StartCellEdit is responsible for 2 things.
+            (1) if Input is a valid change for MemoryLocation, Result should be true after calling the appropriate Visit() method.
+            (2) if the new UnderEdit has something weird about it (such as being more than one space wide), create it and return it as NewFormat.
+                if the new UnderEdit is just the character, NewFormat can be left null, and the calling code will create the appropriate new UnderEdit object.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.Code.DecompileLabelLibrary.AddressToLabel(System.Int32,System.Boolean)">
+            <param name="isScriptAddress">
+            If this is false, the address is not the start of a script, but some other kind of data.
+            Only turn script addresses into section headers.
+            </param>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.Code.ScriptArg.Build(System.Boolean,HavenSoft.HexManiac.Core.Models.IDataModel,System.Int32,System.Text.StringBuilder,System.Collections.Generic.List{System.String},HavenSoft.HexManiac.Core.Models.Code.DecompileLabelLibrary,System.Collections.Generic.IList{HavenSoft.HexManiac.Core.Models.Code.ExpectedPointerType})">
+            <summary>
+            Build from compiled bytes to text.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.Code.ScriptArg.Build(HavenSoft.HexManiac.Core.Models.IDataModel,System.Int32,System.String,System.Int32,System.Collections.Generic.IList{System.Byte},HavenSoft.HexManiac.Core.Models.Code.LabelLibrary)">
+            <summary>
+            Build from text to compiled bytes.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.Code.IScriptLine.CanCompile(System.String)">
+            <summary>
+            Returns true if the command looks correct, even if the arguments are incomplete.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.Code.IScriptLine.ErrorCheck(System.String,System.String[]@)">
+            <summary>
+            Returns an error if the line cannot be compiled, or a set of tokens if it can be compiled.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.Code.MacroScriptLine.ExtractShortformInfo(System.String@)">
+            <summary>
+            Once the short form is exatracted, the long form is left behind.
+            So either way, engineLine is now just the long form.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.Code.ScriptLine.CompiledByteLength(HavenSoft.HexManiac.Core.Models.IDataModel,System.Int32,System.Collections.Generic.IDictionary{System.Int32,System.Int32})">
+            <param name="destinationLengths">If this line contains pointers, calculate the pointer data's lengths and include here.</param>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.Code.ScriptParser.Compile(HavenSoft.HexManiac.Core.Models.ModelDelta,HavenSoft.HexManiac.Core.Models.IDataModel,System.Int32,System.String@,System.Int32@,HavenSoft.HexManiac.Core.ViewModels.Tools.CodeBody,System.Collections.Generic.IReadOnlyList{System.ValueTuple{System.Int32,System.Int32}}@,System.Int32@)">
+            <summary>
+            Potentially edits the script text and returns a set of data repoints.
+            The data is moved, but the script itself has not written by this method.
+            </summary>
+            <param name="movedData">Related data runs that moved during compilation.</param>
+            <param name="ignoreCharacterCount">Number of new characters added that should be ignored by the caret.</param>
+            <returns></returns>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.Code.ScriptExtensions.GetMatchingLine(System.Collections.Generic.IReadOnlyList{HavenSoft.HexManiac.Core.Models.Code.IScriptLine},System.Int32,System.Collections.Generic.IReadOnlyList{System.Byte},System.Int32)">
+            <summary>
+            Does not consider macros. Only returns individual lines.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.Code.ThumbParser.CanRepoint(HavenSoft.HexManiac.Core.Models.IDataModel,System.Int32,System.Int32)">
+            <returns>
+            If a thumb repoint is possible, returns the scratch register that can be safely used for the repoint. -1 if no thumb repoint is possible.
+            </returns>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.Code.ThumbParser.Compile(HavenSoft.HexManiac.Core.Models.ModelDelta,HavenSoft.HexManiac.Core.Models.IDataModel,System.Int32,System.String[])">
+            <summary>
+            If you give the ThumbParser a token, it will make the data changes and the metadata changes
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.Code.ThumbParser.Compile(HavenSoft.HexManiac.Core.Models.IDataModel,System.Int32,System.Collections.Generic.IReadOnlyList{HavenSoft.HexManiac.Core.Models.Runs.IFormattedRun}@,System.String[])">
+            <summary>
+            If you don't give the ThumbParser a token, it will return a set of new Pointers that it expects you to add.
+            </summary>
+        </member>
+        <member name="T:HavenSoft.HexManiac.Core.Models.Code.SkipInstruction">
+            <summary>
+            There are a variety of macros available in thumb that we just ignore. If you see one of these, just move along.
+            </summary>
+        </member>
+        <member name="T:HavenSoft.HexManiac.Core.Models.Code.DeferredLoadRegisterToken">
+            <summary>
+            Represents an instruction like `ldr r0, =(0x8000000)`
+            The word to load and instruction address get cached, but nothing gets written.
+            Later, after an unconditional branch statement (b, bx, or pop pc), the new address is used.
+            </summary>
+        </member>
+        <member name="T:HavenSoft.HexManiac.Core.Models.HardcodeTablesModel">
+             <summary>
+             An alternative to the AutoSearchModel.
+             Instead of using a 'smart' search algorithm to find all the data,
+             follow hard-coded expected pointers to the known data.
+             This should still be somewhat robust: the data may move, but the pointers to the data are more likely to be stable.
+            
+             Lengths of some tables are still calculated dynamically based on best-fit, so operations like adding pokemon from a separate tool should still be picked up correctly.
+             </summary>
+        </member>
+        <member name="P:HavenSoft.HexManiac.Core.Models.HardcodeTablesModel.EarliestAllowedAnchor">
+            <summary>
+            The first 0x100 bytes of the GBA rom is always the header.
+            The next 0x100 bytes contains some tables and some startup code, but nothing interesting to point to.
+            Choosing 0x200 might prevent us from seeing an actual anchor, but it will also remove a bunch
+                 of false positives and keep us from getting conflicts with the RomName (see DecodeHeader).
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.HardcodeTablesModel.AddTable(System.Int32,System.Int32,System.String,System.String)">
+            <summary>
+            Find a table given a pointer to that table
+            The pointer at the source may not point directly to the table: it may point to an offset from the start of the table.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.HardcodeTablesModel.AddTableDirect(System.Int32,System.String,System.String,System.Boolean)">
+            <summary>
+            Find a table given an address for that table
+            </summary>
+        </member>
+        <member name="P:HavenSoft.HexManiac.Core.Models.IDataModel.InitializationWorkload">
+            <summary>
+            Represents any background work being done by the model during startup or after calling Load()
+            </summary>
+        </member>
+        <member name="P:HavenSoft.HexManiac.Core.Models.IDataModel.FreeSpaceStart">
+            <summary>
+            Used during repointing
+            </summary>
+        </member>
+        <member name="P:HavenSoft.HexManiac.Core.Models.IDataModel.NextExportID">
+            <summary>
+            Used when exporting to the backup folder
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.IDataModel.GetNextRun(System.Int32)">
+            <summary>
+            If dataIndex is in the middle of a run, returns that run.
+            If dataIndex is between runs, returns the next available run.
+            If dataIndex is before the first run, return the first run.
+            If dataIndex is after the last run, return a run that starts at int.MaxValue.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.IDataModel.GetNextAnchor(System.Int32)">
+            <summary>
+            If dataIndex is exactly at the start of an anchor, return that run.
+            If dataIndex is between two anchors, return the next anchor.
+            If dataIndex is after the last anchor, return an anchor at int.MaxValue.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.BaseModel.ConsiderResultsAsTextRuns(System.Func{HavenSoft.HexManiac.Core.Models.ModelDelta},System.Collections.Generic.IReadOnlyList{System.Int32})">
+            <summary>
+            Returns the number of new runs found.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.IDataModelExtensions.TryGetNameArray(HavenSoft.HexManiac.Core.Models.IDataModel,System.String,HavenSoft.HexManiac.Core.Models.Runs.ArrayRun@)">
+            <summary>
+            Returns the array by the given name, if it exists
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.IDataModelExtensions.TryGetDerivedEnumNames(HavenSoft.HexManiac.Core.Models.IDataModel,System.String,System.Collections.Generic.IReadOnlyList{System.String}@)">
+            <summary>
+            If anchorName is a table with enums based on another enum, return the appropriate names taken from the original enum list.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.IDataModelExtensions.TryGetListEnumNames(HavenSoft.HexManiac.Core.Models.IDataModel,System.String,System.Collections.Generic.IReadOnlyList{System.String}@)">
+            <summary>
+            If anchorName points to a table that's matched to a list, return the list elements
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.IDataModelExtensions.GetDependantArrays(HavenSoft.HexManiac.Core.Models.IDataModel,System.String)">
+            <summary>
+            Returns all arrays from the model with a length that depends on the parent array.
+            Also returns any array with a BitArraySegment that depends on the parent array.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.IDataModelExtensions.GetPointedChildren``1(HavenSoft.HexManiac.Core.Models.IDataModel,HavenSoft.HexManiac.Core.Models.Runs.ITableRun,System.Int32)">
+            <summary>
+            Returns a list of runs of the expected type that are children of given index in the table.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.IDataModelExtensions.GetEnumArrays(HavenSoft.HexManiac.Core.Models.IDataModel,System.String)">
+            <summary>
+            Returns a list of arrays that use the enumName
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.IDataModelExtensions.ThumbFind(HavenSoft.HexManiac.Core.Models.IDataModel,System.Byte[])">
+            <summary>
+            We can search faster if we're looking for thumb code, because we know the code will be 2-byte aligned.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.IFileSystem.RequestNewName(System.String,System.String,System.String[])">
+            <summary>
+            Have the filesystem ask the user for a new name for a file.
+            If no extensionOptions are provided, the user may specify any extension.
+            Otherwise, the returned name will end with one of the extensionOptions.
+            </summary>
+            <param name="currentName">
+            The current name of the file, which may be either relative or absolute, including extension.
+            This parameter may be empty, but not null.
+            </param>
+            <param name="extensionOptions">
+            A set of extensions, such as 'txt', 'gba', or 'png'. Should not start with a dot.
+            The set may be empty, but not null.
+            </param>
+            <returns>
+            The new name if provided, or null if the operation was canceled by the user.
+            </returns>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.IFileSystem.OpenFile(System.String,System.String[])">
+            <summary>
+            Have the filesystem ask the user for an existing file.
+            If no extensionOptions are provided, the user may specify any existing file.
+            </summary>
+            <param name="extensionOptions">
+            A set of extensions, such as 'txt', 'gba', or 'png'. Should not start with a dot.
+            The set may be empty, but not null.
+            </param>
+            <returns>
+            If the user chooses a file, that file is loaded and returned.
+            If the user cancels or selects an unreadable file, returns null.
+            </returns>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.IFileSystem.Exists(System.String)">
+            <returns>true if the file can be loaded</returns>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.IFileSystem.LoadFile(System.String)">
+            <summary>
+            Have the filesystem open a specific file.
+            </summary>
+            <returns>
+            If the file exists, it is loaded and returned.
+            If it doesn't exist, returns null.
+            </returns>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.IFileSystem.AddListenerToFile(System.String,System.Action{HavenSoft.HexManiac.Core.Models.IFileSystem})">
+            <summary>
+            When a file changes, the filesystem will call all listeners for that file.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.IFileSystem.Save(HavenSoft.HexManiac.Core.Models.LoadedFile)">
+            <summary>
+            Saves the file without prompting the user for permission.
+            </summary>
+            <returns>
+            true if it was possible to save, false if there was an error.
+            In the case of false, the file system would have already dealt with the error.
+            The return value is just so the program can know if it was written or not.
+            </returns>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.IFileSystem.TrySavePrompt(HavenSoft.HexManiac.Core.Models.LoadedFile)">
+            <summary>
+            should prompt the user if they want to save and then save
+            </summary>
+            <returns>
+            true if the user wanted to save the file and it was written successfully
+            false if the user decided not to save the file
+            null if there was any error or if the operation was canceled by the user.
+            the FileSystem object will handle the error and potentially notify the user,
+            the result is only so the program can know if it was written or not.
+            </returns>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.IFileSystem.MetadataFor(System.String)">
+            <summary>
+            Look for a metadata object that matches a filename.
+            Return null if no metadata is found.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.IFileSystem.LoadImage(System.String)">
+            <summary>
+            Show the user a dialog so they can select an image.
+            Load the image into a 16bit (5r5g5b) array.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.IFileSystem.TryLoadIndexedImage(System.String@,System.Int32[0:,0:]@,System.Collections.Generic.IReadOnlyList{System.Int16}@)">
+            <summary>
+            Tries to load an indexed image.
+            If the image isn't indexed or the file doesn't exist, returns false.
+            </summary>
+            <param name="fileName">
+            If null, show the user a dialog so they can select an image.
+            In that case, the chosen filename will be stored in this parameter even if the load fails.
+            If the user cancels, the function will return false and the fileName will still be null.
+            </param>
+            <param name="image">Resulting indexes into the palette.</param>
+            <param name="palette">Resulting 16bit palette, in 5r5g5b. </param>
+            <returns></returns>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.IFileSystem.SaveImage(System.Int16[],System.Int32,System.String)">
+            <summary>
+            Show the user a dialog so they can create a file.
+            Save this 16bit (5r5g5b) array into that file.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.IFileSystem.SaveImage(System.Int32[0:,0:],System.Collections.Generic.IReadOnlyList{System.Int16},System.String)">
+            <summary>
+            Shows the user a dialog so they can create a file.
+            Saves an indexed image with no more than 16 colors.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.IWorkDispatcher.WaitForRenderingAsync">
+            <summary>
+            Pauses until the UI render thread has had a chance to complete rendering.
+            Continued work will be done on a background thread.
+            Without this, further property notifications to the UI may cause UI studdering or freezing.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.IWorkDispatcher.DispatchWork(System.Action)">
+            <summary>
+            If there's a long-running task, you can use this to break it up into chunks.
+            This work will be run at a low priority next time the main thread is available.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.IWorkDispatcher.RunBackgroundWork(System.Action)">
+            <summary>
+            This work will be run an a background thread. Don't do UI stuff in here!
+            </summary>
+            <param name="action"></param>
+        </member>
+        <member name="T:HavenSoft.HexManiac.Core.Models.InlineDispatch">
+            <summary>
+            Adapter so that await operations cause a work split, so that the UI can take a break to update.
+            </summary>
+        </member>
+        <member name="T:HavenSoft.HexManiac.Core.Models.ModelDelta">
+            <summary>
+            Represents a single conceptual change in the loaded data, including
+            editing data, adding / removing formats / format names,
+            and tracking pointers that lead to a name that isn't in the ROM yet.
+            </summary>
+        </member>
+        <member name="T:HavenSoft.HexManiac.Core.Models.TransientModelDelta">
+            <summary>
+            Represents a non-data change that should not remove zero-pointer runs.
+            This change is transient, so we expect those runs to have new pointers added before the end of the operation.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.ModelArrayElement.Render(System.String)">
+            <summary>
+            Attempts to render a sprite from a pointer field.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.ITextConverter.GetOverflow(System.String,System.Int32)">
+            <summary>
+            Resolve the pixel-width of a input string,
+            if the string is shown in a textbox.
+            </summary>
+        </member>
+        <member name="T:HavenSoft.HexManiac.Core.Models.PCSString.NewlineMode">
+            <summary>
+            If it's the first line, there's been no newline.
+            If the user species an explicit newline, then no auto-newline is needed.
+            If there are 2 newlines in a row, read it as a Paragraph.
+            If the most recent newline was a paragraph, the next line should be Wrap.
+            If the most recent newline was Wrap or Feed, the next line should be Feed.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.PCSString.ReadString(System.Collections.Generic.IReadOnlyList{System.Byte},System.Int32,System.Boolean,System.Int32)">
+            <summary>
+            Figure out the length of a string starting at a given location in the data.
+            If the data doesn't represent a string, return -1.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.PokemonModel.BuildDestinationToSourceCache(System.Byte[])">
+            <summary>
+            setup a cache to make loading faster
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.PokemonModel.ClearNoEditTableGroups">
+            <summary>
+            Delete whatever TableGroups have matching Hashes: those haven't been edited by the user.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.PokemonModel.SearchForPointers(System.Collections.Generic.Dictionary{System.Int32,HavenSoft.HexManiac.Core.Models.Runs.SortedSpan{System.Int32}},System.Collections.Generic.SortedList{System.Int32,System.Int32})">
+            <summary>
+            Finds pointers based on Heuristics.
+            This is definitely wrong, but it's pretty good.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.PokemonModel.GetAnchorFromAddress(System.Int32,System.Int32)">
+            <summary>
+            If no anchor is found, return string.Empty.
+            Never returns null.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.PokemonModel.ThreadlockRuns(System.Action)">
+            <summary>
+            Allow clients to do arbitrary operations that need the threadlock early.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.PokemonModel.GetNextRunUnthreaded(System.Int32)">
+            <summary>
+            Only call this version if we're in a situation where we know the collection can't be changed by another thread because we're already in a threadlock scope
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.PokemonModel.ModifyAnchorsFromPointerArray(HavenSoft.HexManiac.Core.Models.ModelDelta,HavenSoft.HexManiac.Core.Models.Runs.ITableRun,HavenSoft.HexManiac.Core.Models.Runs.ITableRun,System.Int32,System.Action{HavenSoft.HexManiac.Core.Models.Runs.ArrayRunElementSegment,System.Collections.Generic.IReadOnlyList{HavenSoft.HexManiac.Core.Models.Runs.ArrayRunElementSegment},System.Int32,HavenSoft.HexManiac.Core.Models.ModelDelta,System.Int32})">
+            <summary>
+            A new array just came in. It might have pointers.
+            When we make a new pointer, we need to update anchors to include the new pointer.
+            So update all the anchors based on any new pointers in this newly added array.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.PokemonModel.UpdateAnchorsFromArrayMove(HavenSoft.HexManiac.Core.Models.ModelDelta,HavenSoft.HexManiac.Core.Models.Runs.ITableRun,HavenSoft.HexManiac.Core.Models.Runs.ITableRun)">
+            <summary>
+            An array was moved.
+            If that array pointed to stuff, that stuff needs to know that its sources moved.
+            Remove the sources that match the array's original location.
+            Add new sources corresponding to the array's new location.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.PokemonModel.UpdateDependantArrayLengths(HavenSoft.HexManiac.Core.Models.ModelDelta,HavenSoft.HexManiac.Core.Models.Runs.ArrayRun)">
+            <summary>
+            This new array may have other arrays who's length depend on it.
+            Update those arrays based on this new length.
+            (Recursively, since other arrays might depend on those ones).
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.PokemonModel.ShiftTableBytesForGrowingSegment(HavenSoft.HexManiac.Core.Models.ModelDelta,HavenSoft.HexManiac.Core.Models.Runs.ArrayRun,System.Int32,System.Int32)">
+            <summary>
+            A segment within a table is growing to include an extra byte.
+            Shift all the bytes within the table to make room within each element for the new byte at the end of the chosen segment.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.PokemonModel.AddPointerToAnchor(HavenSoft.HexManiac.Core.Models.Runs.ArrayRunElementSegment,System.Collections.Generic.IReadOnlyList{HavenSoft.HexManiac.Core.Models.Runs.ArrayRunElementSegment},System.Int32,HavenSoft.HexManiac.Core.Models.ModelDelta,System.Int32)">
+            <summary>
+            There is a pointer at 'start' that was just added.
+            Update anchor at destination to include that pointer.
+            </summary>
+            <param name="changeToken"></param>
+            <param name="start"></param>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.PokemonModel.UpdateNewRunFromPointerFormat(HavenSoft.HexManiac.Core.Models.Runs.IFormattedRun@,HavenSoft.HexManiac.Core.Models.Runs.ArrayRunPointerSegment,System.Collections.Generic.IReadOnlyList{HavenSoft.HexManiac.Core.Models.Runs.ArrayRunElementSegment},System.Int32,HavenSoft.HexManiac.Core.Models.ModelDelta)">
+            <summary>
+            If this new FormattedRun is a pointer to a known stream format,
+            Update the model so the data we're pointing to is actually that format.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.PokemonModel.ClearPointer(HavenSoft.HexManiac.Core.Models.ModelDelta,System.Int32,System.Int32)">
+            <summary>
+            Removes a pointer from the list of sources
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.PokemonModel.ReadGameCode(HavenSoft.HexManiac.Core.Models.IDataModel)">
+            <summary>
+            If this model recognizes a GameCode AsciiRun, return that code formatted as a name.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.PokemonModel.GetSampleText(HavenSoft.HexManiac.Core.Models.Runs.IFormattedRun)">
+            <summary>
+            If the run is text, grab the first 3 words and return it formatted as a name.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.PokemonModel.GetAutoCompleteOptions(System.String,HavenSoft.HexManiac.Core.Models.Runs.ITableRun,System.String[])">
+             <summary>
+             This recursively looks through parts[], alternating looking for two things:
+             (1) Find which index of an array we're looking at.
+             (2) Find which segment of that element we're looking at.
+             (3) Follow a pointer and go back to (1).
+            
+             Since there are multiple cases for what an 'index' can look like, we have to check each case for each index. 2 loops.
+             Since there can be multiple returns from a pointer, we have to return each recursive result for each segment name. 2 loops.
+            
+             ... So this function has 4 nested for-loops, each with multiple conditionals.
+             </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.PokemonModel.SearchForPointersToAnchor(HavenSoft.HexManiac.Core.Models.ModelDelta,System.Boolean,System.Int32[])">
+            <summary>
+            This method might be called in parallel with the same changeToken
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.PokemonModel.TryMakePointerAtAddress(HavenSoft.HexManiac.Core.Models.ModelDelta,System.Int32,System.Boolean,HavenSoft.HexManiac.Core.Models.Runs.PointerRun@)">
+             <summary>
+             Returns true if the model is able to detect a valid pointer at that address.
+             Returns a new pointer run to add if the valid pointer doesn't have a matching run yet.
+            
+             This method can be called from a parellel context, so it doesn't make any changes to the runs collection.
+             Instead, it returns a new pointer run if one needs to be added.
+            
+             The read-only nature of the method means that it shouln't lock and can be called in parallel,
+             but the caller is in charge of making sure the run collection doesn't change while this is working.
+             </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.PokemonModel.GetSourcesPointingToNewAnchor(HavenSoft.HexManiac.Core.Models.ModelDelta,System.String,HavenSoft.HexManiac.Core.Models.Runs.IFormattedRun,System.Boolean)">
+            <summary>
+            if there are unmapped sources trying to point to this name, point them at the new anchor
+            </summary>
+            <returns>
+            The list of sources that point at the new anchor
+            </returns>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.Runs.ITableRunExtensions.ConvertByteOffsetToArrayOffset(HavenSoft.HexManiac.Core.Models.Runs.ITableRun,System.Int32)">
+            <param name="byteOffset">Ranges from 0 to Model.Count</param>
+        </member>
+        <member name="P:HavenSoft.HexManiac.Core.Models.Runs.ArrayOffset.ElementIndex">
+            <summary>
+            Ranges from 0 to ElementCount
+            </summary>
+        </member>
+        <member name="P:HavenSoft.HexManiac.Core.Models.Runs.ArrayOffset.SegmentIndex">
+            <summary>
+            Ranges from 0 to ElementContent.Count
+            </summary>
+        </member>
+        <member name="P:HavenSoft.HexManiac.Core.Models.Runs.ArrayOffset.SegmentStart">
+            <summary>
+            The data address where the current segment starts. Ranges from n to n+ElementContent[SegmentIndex].Length.
+            </summary>
+        </member>
+        <member name="P:HavenSoft.HexManiac.Core.Models.Runs.ArrayOffset.SegmentOffset">
+            <summary>
+            The index into the current segment. 0 means the start of the segment.
+            </summary>
+        </member>
+        <member name="P:HavenSoft.HexManiac.Core.Models.Runs.ArrayRun.LengthFromAnchor">
+            <summary>
+            For some arrays, their length is determined by another named array.
+            This way, we can know when we need to expand multiple arrays to keep them the same length.
+            </summary>
+        </member>
+        <member name="P:HavenSoft.HexManiac.Core.Models.Runs.ArrayRun.ParentOffset">
+            <summary>
+            For some dependendent arrays, the length doesn't exactly match.
+            For example, move 0 doesn't have a description.
+            </summary>
+        </member>
+        <member name="P:HavenSoft.HexManiac.Core.Models.Runs.ArrayRun.PointerSourcesForInnerElements">
+            <summary>
+            For Arrays that support pointers to individual elements within the array,
+            This is the set of sources that points to each index of the array.
+            The first set of sources (PointerSourcesForInnerElements[0]) should always be the same as PointerSources.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.Runs.ArrayRun.AdjustTableIndexValues(HavenSoft.HexManiac.Core.Models.ModelDelta,System.Int32)">
+            <summary>
+            Look for number segments called 'index' or 'id'.
+            Find whatever run contains the 'end' of the values and bump their values.
+            Then set the new elements based on the new value gap.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.Runs.ArrayRun.GetColumnHeaders(System.Int32,System.Int32)">
+            <summary>
+            Arrays might want custom column headers.
+            If so, this method can get them.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.Runs.ArrayRun.FindAllByteReads(HavenSoft.HexManiac.Core.Models.Code.ThumbParser,System.Int32)">
+            <summary>
+            Finds all places in the current model that try to read the specified field.
+            The field must be a single byte wide.
+            Each result will be the address of a thumb instruction in the form `ldrb rD, [rN, #offset]`
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.Runs.ArrayRun.FindAllLoads(HavenSoft.HexManiac.Core.Models.IDataModel,HavenSoft.HexManiac.Core.Models.Code.ThumbParser,System.Int32)">
+            <summary>
+            Seeks backwards from the pointer to the start of the function.
+            Then returns all locations that are loading the pointer.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.Runs.ArrayRun.FindAllCommands(HavenSoft.HexManiac.Core.Models.IDataModel,HavenSoft.HexManiac.Core.Models.Code.ThumbParser,System.Int32,System.String,System.Func{System.String,System.String,System.Boolean},System.Collections.Generic.IReadOnlyList{System.Int32},System.Boolean)">
+            <summary>
+            From a starting address, seeks all uses of a register that match a preidcate.
+            Stops searching when the value of the register gets changed, or when the function returns.
+            Follows branches / moves for the value.
+            </summary>
+            <param name="predicate">
+            The first argument to the predicate is the line of assembly code that we're checking.
+            The second argument to the predicate is the register that we're currently watching.
+            This is usually registerSource, but may've changed because of mov operations.
+            We're guaranteed that the line in question contains the source register that we're watching.
+            If registerSource starts with !, we can be given a line that does _not_ contain that register, but we'll still stop searching when the value of the register gets changed.
+            The predicate allows the line to be checked for other conditions, such as making sure that it's an 'add' instruction.
+            </param>
+            <returns>
+            Returns the address of the command that used the source and the register of the result.
+            </returns>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.Runs.ArrayRunElementSegment.Write(System.Collections.Generic.IReadOnlyList{HavenSoft.HexManiac.Core.Models.Runs.ArrayRunElementSegment},HavenSoft.HexManiac.Core.Models.IDataModel,HavenSoft.HexManiac.Core.Models.ModelDelta,System.Int32,System.String@)">
+            <summary>
+            Writes data to the model.
+            If data gets parsed into further tokens,
+              the remaining work is returned in data.
+            If data gets parsed and submitted fully,
+              data is returned as an empty string.
+            </summary>
+            <returns>
+            true if the data was changed.
+            </returns>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.Runs.ArrayRunEnumSegment.GetBestOptions(System.Collections.Generic.IEnumerable{System.String},System.String,System.Boolean)">
+            <summary>
+            Returns a sorted list of options based on 'best match'
+            </summary>
+        </member>
+        <member name="T:HavenSoft.HexManiac.Core.Models.Runs.ArrayRunPointerSegment">
+            <summary>
+            For pointers that contain nested formatting instructions.
+            For example, pointing to a text stream or a plm (pokemon learnable moves) stream
+            </summary>
+        </member>
+        <member name="T:HavenSoft.HexManiac.Core.Models.Runs.ArrayRunCalculatedSegment">
+            <summary>
+            Calculation options:
+            (data.pokemon.stats/hp=field)/atk -> get the attack of the pokemon who's hp matches some field in the current table.
+            5                                 -> a constant
+            field                             -> another field within the current element of this table
+            data.pokemon.stats/hp             -> get the hp of the pokemon with the same index as the current table (TODO)
+            </summary>
+        </member>
+        <member name="T:HavenSoft.HexManiac.Core.Models.Runs.Factory.AsciiRunContentStrategy">
+            <summary>
+            Format Specifier:     `asc`
+            ASCII runs are not currently supported within tables.
+            </summary>
+        </member>
+        <member name="T:HavenSoft.HexManiac.Core.Models.Runs.Factory.EggRunContentStrategy">
+            <summary>
+            Format Specifier:     `egg`
+            Egg runs are not currently supported within tables.
+            </summary>
+        </member>
+        <member name="T:HavenSoft.HexManiac.Core.Models.Runs.Factory.LzPaletteRunContentStrategy">
+            <summary>
+            Format Specifier:     `lzpB` where B=bits. Example: `lzp4`
+            Represents an _lz compressed_ run of bytes for a palette.
+            The palette can either be 4 bits per color (16 colors) or 8 bits per color (256 colors).
+            Either way, each color when uncompressed is 16 bits long, with 5 bits each for rgb.
+            </summary>
+        </member>
+        <member name="T:HavenSoft.HexManiac.Core.Models.Runs.Factory.LzSpriteRunContentStrategy">
+            <summary>
+            Format Specifier:     `lzsBxWxH` B=Bits, W=Width, H=Height. Example: 4x8x8
+            Represents a _lz compressed_ run of data for a sprite with the specified dimensions.
+            The run format may optionally end with "|name", where "name" is the name of a palette or palette collection.
+            This name serves as a hint, helping the sprite find its colors.
+            </summary>
+        </member>
+        <member name="T:HavenSoft.HexManiac.Core.Models.Runs.Factory.MapAnimationTilesStrategy">
+            <summary>
+            Table of pointers to uncompressed tiles.
+            The kicker is that each pointer points to N tiles.
+            N is decided by the 'tiles' field in a parent table.
+            Number of pointers is decided by 'frames' field in parent table.
+            </summary>
+        </member>
+        <member name="T:HavenSoft.HexManiac.Core.Models.Runs.Factory.PaletteRunContentStrategy">
+            <summary>
+            Format Specifier:     `ucpB:P` where B=bits, P=Pages. Ex: `ucp4`
+            Represents an uncompressed stream of bytes for a palette, where each color is 2 bytes long.
+            The palette will either be for a 4-bit-per-color image (16 colors) or 8-bit-per-color image (256 colors)
+            Uncompressed palettes do not currently support paging. The byte length is determined soley by the bitness.
+            </summary>
+        </member>
+        <member name="T:HavenSoft.HexManiac.Core.Models.Runs.Factory.PCSRunContentStrategy">
+            <summary>
+            Format Specifier:     ""
+            Expected usage:
+                            This format represents text using the pokemon character set.
+            </summary>
+        </member>
+        <member name="T:HavenSoft.HexManiac.Core.Models.Runs.Factory.PLMRunContentStrategy">
+            <summary>
+            Format Specifier:     `plm`
+            Represents a stream of level up moves in a 7-9 bit split.
+            (A future refactor will hopefully replace this as just a special case of the ITableStreamRun
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.Runs.Factory.RunStrategy.LengthForNewRun(HavenSoft.HexManiac.Core.Models.IDataModel,System.Int32)">
+            <summary>
+            If a 'default' run is created for the pointer at the given address, how many bytes need to be available at the destination location?
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.Runs.Factory.RunStrategy.TryAddFormatAtDestination(HavenSoft.HexManiac.Core.Models.IDataModel,HavenSoft.HexManiac.Core.Models.ModelDelta,System.Int32,System.Int32,System.String,System.Collections.Generic.IReadOnlyList{HavenSoft.HexManiac.Core.Models.Runs.ArrayRunElementSegment},System.Int32)">
+            <summary>
+            Returns true if the format is capable of being added for the pointer at source.
+            If the token is such that edits are allowed, actually add the format.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.Runs.Factory.RunStrategy.Matches(HavenSoft.HexManiac.Core.Models.Runs.IFormattedRun)">
+            <summary>
+            Returns true if the input run is valid for this run 'type'.
+            Often this is just a type comparison, but for runs with multiple
+            formats (example, SpriteRun with width/height), it can be more complex.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.Runs.Factory.RunStrategy.WriteNewRun(HavenSoft.HexManiac.Core.Models.IDataModel,HavenSoft.HexManiac.Core.Models.ModelDelta,System.Int32,System.Int32,System.String,System.Collections.Generic.IReadOnlyList{HavenSoft.HexManiac.Core.Models.Runs.ArrayRunElementSegment})">
+            <summary>
+            Create a new run meant to go into a pointer in a table.
+            The destination has been prepared, but is all FF.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.Runs.Factory.RunStrategy.UpdateNewRunFromPointerFormat(HavenSoft.HexManiac.Core.Models.IDataModel,HavenSoft.HexManiac.Core.Models.ModelDelta,System.String,System.Collections.Generic.IReadOnlyList{HavenSoft.HexManiac.Core.Models.Runs.ArrayRunElementSegment},System.Int32,HavenSoft.HexManiac.Core.Models.Runs.IFormattedRun@)">
+            <summary>
+            A pointer format in a table has changed.
+            Replace the given run with a new run of the appropriate format.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.Runs.Factory.RunStrategy.TryParseData(HavenSoft.HexManiac.Core.Models.IDataModel,System.String,System.Int32,HavenSoft.HexManiac.Core.Models.Runs.IFormattedRun@)">
+            <summary>
+            Attempt to parse the existing data into a run of the desired type.
+            </summary>
+        </member>
+        <member name="T:HavenSoft.HexManiac.Core.Models.Runs.Factory.SpriteRunContentStrategy">
+            <summary>
+            Format Specifier:     `ucsBxWxH` where B=bits, W=width, H=height. Ex: `ucs4x8x8`
+            Represents an uncompressed stream of bytes representing a tiled image with a given width/height.
+            Uncompressed sprites do not currently support paging. The byte length is determined soley by the width/height and the bitness.
+            </summary>
+        </member>
+        <member name="T:HavenSoft.HexManiac.Core.Models.Runs.Factory.TableStreamRunContentStrategy">
+            <summary>
+            Format Specifier:     []...
+            Represents a general type of run where there are a number of sections, each with the same format, followed by an optional terminator.
+            TableStreams are very broad in application. Basically, any table that points to another table, the inner table is a tablestream.
+            TableStreams can nest.
+            </summary>
+        </member>
+        <member name="T:HavenSoft.HexManiac.Core.Models.Runs.Factory.TrainerPokemonTeamRunContentStrategy">
+            <summary>
+            Format Specifier:     `tpt`
+            Represents a run of pokemon used by a trainer.
+            This is one of four formats, and its number of elements is specified based on the table that points to it.
+            As such, this is NOT just a special type of TableStream, because it needs custom logic.
+            </summary>
+        </member>
+        <member name="T:HavenSoft.HexManiac.Core.Models.Runs.ColumnHeaderRow">
+            <summary>
+            Represents a horizontal row of labels.
+            Each entry is meant to label a column.
+            </summary>
+        </member>
+        <member name="T:HavenSoft.HexManiac.Core.Models.Runs.IStreamRun">
+            <summary>
+            A run representing a stream.
+            Streams usually are variable length, and end with some sort of 'end' token.
+            We want to be able to stringify streams, so we can use them with the tools.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.Runs.IStreamRun.SerializeRun">
+            <summary>
+            Should not change the data, only creates a string representation of that data.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.Runs.IStreamRun.DeserializeRun(System.String,HavenSoft.HexManiac.Core.Models.ModelDelta,System.Collections.Generic.IReadOnlyList{System.Int32}@,System.Collections.Generic.IReadOnlyList{System.Int32}@)">
+            <summary>
+            Updates data based on converting content back into the stream.
+            Returns the run where the data was placed.
+            The run usually starts at the same spot as before, but in the case of repointing it can be different.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.Runs.IStreamRun.GetAutoCompleteOptions(System.String,System.Int32,System.Int32)">
+            <param name="line">The current line being edited</param>
+            <param name="caretLineIndex">The index of the current line (useful for streams with element-per-line syntax)</param>
+            <param name="caretCharacterIndex">The index of the caret within the line</param>
+            <returns>A list of named commands. Executing a command will complete the option.</returns>
+        </member>
+        <member name="T:HavenSoft.HexManiac.Core.Models.Runs.CompareFormattedRun">
+            <summary>
+            Converts from a start index to an IFormattedRun, for comparison purposes.
+            </summary>
+        </member>
+        <member name="T:HavenSoft.HexManiac.Core.Models.Runs.FakeRun">
+            <summary>
+            We need a run with a length, but it's not actually going to be added to the model
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.Runs.SortedSpan`1.#ctor(`0[],System.Int32)">
+            <summary>
+            Calling this constructor is dangerous!
+            You need to guarantee that the array is not shared, and the array elements are already unique and sorted.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.Runs.ModelCacheScope.AddResult(System.Collections.Generic.IDictionary{System.String,System.Int32},System.Collections.Generic.IList{System.String},System.String)">
+            <summary>
+            Adds a ~n suffix onto results that have already been added to this result list before.
+            This lets us easily distinguish multiple elements with the same name.
+            </summary>
+        </member>
+        <member name="T:HavenSoft.HexManiac.Core.Models.Runs.PIERun">
+            <summary>
+            Represents a pokemon item effect.
+            See https://www.pokecommunity.com/showthread.php?p=6745155#post6745155
+            </summary>
+        </member>
+        <member name="T:HavenSoft.HexManiac.Core.Models.Runs.PLMRun">
+            <summary>
+            PLMRuns have a hard-coded dependency on a table named 'movenames', which it uses to... get the names of the moves.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.Runs.Sprites.LZRun.IsCompressedLzData(System.Collections.Generic.IReadOnlyList{System.Byte},System.Int32,System.Boolean)">
+            <returns>The length of the compressed data</returns>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.Runs.Sprites.LZRun.IsCompressedLzData(System.Collections.Generic.IReadOnlyList{System.Byte},System.Int32,System.Boolean,System.Boolean@)">
+            <returns>
+            The length of the compressed data.
+            If the decompressed data is longer than expected and allowLengthErrors is false, returns -2.
+            Any other decompression error returns -1.
+            </returns>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.Runs.Sprites.LZRun.FixupEnd(HavenSoft.HexManiac.Core.Models.IDataModel,HavenSoft.HexManiac.Core.Models.ModelDelta,System.Int32)">
+            <summary>
+            In response to a change to the raw data,
+            shorten or lengthen the run.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.Runs.Sprites.LZRun.RecommendedFixup(System.Int32)">
+            <summary>
+            Without worrying about available space, rectify the end of the data to make it the appropriate length.
+            </summary>
+            <param name="fixupStart">
+            The first index of the compressed data that is allowed to change.
+            </param>
+            <returns>
+            null, only if the data tail cannot safely be modified to make the length correct.
+            </returns>
+        </member>
+        <member name="P:HavenSoft.HexManiac.Core.Models.Runs.Sprites.LzTilemapRun.SupportsImport">
+            <summary>
+            Only allow import if our tileset is actually a tileset
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.Runs.Sprites.LzTilemapRun.ReadTileData(System.Byte[],System.Int32,System.Int32)">
+            <param name="mapData">The decompressed tilemap data</param>
+            <param name="tile">The index of the tile, from 0 to tileWidth*tileHeight</param>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.Runs.Sprites.LzTilemapRun.ReplaceData(System.Byte[],HavenSoft.HexManiac.Core.Models.ModelDelta)">
+            <param name="newRawData">Uncompressed data that we want to compress and insert.</param>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.Runs.Sprites.LzTilemapRun.FindMatch(System.Int32[0:,0:],System.Collections.Generic.IReadOnlyList{System.Int32[0:,0:]},System.Boolean)">
+            <summary>
+            If there is a tile that matches exactly, return that one (TileMatchType.Normal)
+            Otherwise, return the first tile that matches, or (-1, None) if no tiles match.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.Runs.Sprites.PaletteRun.GetPalette(System.Collections.Generic.IReadOnlyList{System.Byte},System.Int32,System.Int32)">
+            <summary>
+            The GBA stores colors in a 16-bit rgb value, 5 bits per channel. R is the high channel.
+            We render colors as 16-bit bgr values, 5 bits per channel. B is the high channel.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.Runs.Sprites.PaletteRun.SetPalette(System.Byte[],System.Int32,System.Collections.Generic.IReadOnlyList{System.Int16})">
+            <summary>
+            We render colors as 16-bit bgr values, 5 bits per channel. B is the high channel.
+            The GBA stores colors in a 16-bit rgb value, 5 bits per channel. R is the high channel.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.Runs.Sprites.PaletteRun.FlipColorChannels(System.Int16)">
+            <summary>
+            the gba and WPF do color channels reversed
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.Runs.Sprites.SpriteRun.GetPixels(System.Collections.Generic.IReadOnlyList{System.Byte},System.Int32,System.Int32,System.Int32,System.Int32)">
+            <summary>
+            convert from raw values to palette-index values
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.Runs.Sprites.IPaletteRunExtensions.FindRelatedPalettes(HavenSoft.HexManiac.Core.Models.Runs.Sprites.ISpriteRun,HavenSoft.HexManiac.Core.Models.IDataModel,System.Int32,System.String,System.Boolean)">
+            <summary>
+            Uses the hint, as well as this sprite's table location (if any), to find palettes that can be applied to this sprite.
+            (1) if the sprite's hint is the name of a palette, return that. Example: title screen pokemon sprite/palette pair.
+            (2) if the sprite's hint is the name of an enum table, use that enum's source as a list of palettes and get the appropriate one from the matching index of the enum table. Example: pokemon icons
+            (3) if the sprite's hint is a table name followed by a key=value pair, go grab the a palette from the element within that table such that it's key equals that value. Example: Overworld sprites
+            (4) if the sprite's hint is a table name, return all palettes within the matching index of that table. Example: trainer sprites/palettes.
+            (5) if the sprite has no hint, return all palettes in arrays with matching length from the same index. Example: pokemon sprites. Leaving it empty allows both normal and shiny palettes to match.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.Runs.Sprites.IPaletteRunExtensions.FindDependentSprites(HavenSoft.HexManiac.Core.Models.Runs.Sprites.IPaletteRun,HavenSoft.HexManiac.Core.Models.IDataModel)">
+            <summary>
+            Find all sprites that depend on a palette, either explicitly or implicitly
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.Runs.Sprites.IPaletteRunExtensions.GetLengthSortedRelatedArrays(HavenSoft.HexManiac.Core.Models.IDataModel,HavenSoft.HexManiac.Core.Models.Runs.ArrayRun)">
+            <summary>
+            Returns all related arrays, sorted with the longer anchor names first.
+            This unusual strategy allows 'front' before 'back' and 'normal' before 'shiny'.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.Runs.Sprites.TilemapRun.ReplaceData(System.Byte[],HavenSoft.HexManiac.Core.Models.ModelDelta)">
+            <param name="newRawData">Uncompressed data that we want to compress and insert.</param>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.Runs.TableStreamRun.ParseEndStream(HavenSoft.HexManiac.Core.Models.IDataModel,System.String,System.String,System.Collections.Generic.IReadOnlyList{HavenSoft.HexManiac.Core.Models.Runs.ArrayRunElementSegment},System.Collections.Generic.IReadOnlyList{HavenSoft.HexManiac.Core.Models.Runs.ArrayRunElementSegment})">
+            <summary>
+            ]3      -> FixedLength
+            ]!00    -> EndCode
+            ]/field -> LengthFromParent
+            ]?      -> Dynamic
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.Runs.IStreamEndStrategy.Append(HavenSoft.HexManiac.Core.Models.Runs.TableStreamRun,HavenSoft.HexManiac.Core.Models.ModelDelta,System.Int32)">
+            <summary>
+            Creates a new TableStreamRun with the changed length, but does not add it to the model.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.Runs.TrainerPokemonTeamRun.GetDefaultMoves(System.Int32,System.Int32)">
+            <summary>
+            Finds what 4 moves a pokemon would have by default, based on lvlmoves and the given level
+            </summary>
+        </member>
+        <member name="T:HavenSoft.HexManiac.Core.Models.SearchTree`1">
+            <summary>
+            Implements a sorted collection with methods for storing and retrieving elements.
+            Unlike a SortedDictionary&lt;&gt;, you can get a value using a key that's not in the dictionary.
+            In such a case, you get the value with the _next_ start position.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.TreeNode.Add``1(HavenSoft.HexManiac.Core.Models.TreeNode{``0}@,``0)">
+            <returns>True if the size of the collection grew.</returns>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.TreeNode.Remove``1(HavenSoft.HexManiac.Core.Models.TreeNode{``0}@,System.Int32)">
+            <returns>True if a node was actually removed.</returns>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.TreeNode`1.Verify">
+            <summary>
+            Checks to make sure that this red-black subtree obeys the no-double-red rule and the black-height-match rule.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.TreeNode`1.Add(HavenSoft.HexManiac.Core.Models.TreeNode{`0}@,`0)">
+            <summary>
+            Only do tree-balancing if the current node is red.
+            Returns true if the higher level should perform balancing.
+            </summary>
+        </member>
+        <member name="T:HavenSoft.HexManiac.Core.Models.Singletons">
+            <summary>
+            Shared resources that involve an expensive setup, (so we only want to do it once) but then cannot be edited after being initialized.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.Singletons.ExportReadableScriptReference(HavenSoft.HexManiac.Core.ViewModels.EditorViewModel,System.Collections.Generic.IReadOnlyList{HavenSoft.HexManiac.Core.Models.Code.IScriptLine},System.Collections.Generic.Dictionary{System.String,HavenSoft.HexManiac.Core.Models.StoredList},System.String)">
+            <summary>
+            For consistency, run this when the following tabs are open in the following order:
+            FireRed 1.0, Emerald 1.0, Ruby 1.0
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.GameReferenceTables.GetIndexOfNearestAddress(System.Int32)">
+            <summary>
+            Given an address, finds the reference table nearest to that address
+            and returns its index.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Models.StoredMetadata.NeedVersionUpdate(System.String,System.String)">
+            <summary>
+            Compares to version strings, in the format major.minor.update.release
+            </summary>
+            <returns>True if the previous verison is less than the current version.</returns>
+        </member>
+        <member name="T:HavenSoft.HexManiac.Core.Models.StoredList">
+            <summary>
+            An index of Contents being 'null' means sticking with the default value
+            </summary>
+        </member>
+        <member name="P:HavenSoft.HexManiac.Core.IDelayWorkTimer.HasScheduledWork">
+            <summary>
+            Returns true if 'DelayCall' has been called, but the work has not yet been executed.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.IDelayWorkTimer.DelayCall(System.TimeSpan,System.Action)">
+            <summary>
+            Will call the action after the delay.
+            Returns 'WorkScheduledAndPreviousWorkCleared' if this delay work timer was already tracking work.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.IDelayWorkTimer.Reset">
+            <summary>
+            Clears any currently scheduled work.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.SystemExtensions.InRange``1(``0,``0,``0)">
+            <summary>
+            Returns true if min &lt;= value and value &lt; max
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.SystemExtensions.ToHistogram``1(System.Collections.Generic.IEnumerable{``0})">
+            <summary>
+            Returns the number of times each element appears in the sequence.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.SystemExtensions.Until``1(System.Collections.Generic.IEnumerable{``0},System.Func{``0,System.Boolean})">
+            <summary>
+            Returns all the elements in a collection until one meets a condition.
+            Does not include the element that meets the condition.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.SystemExtensions.MatchLength(System.String,System.String,System.Boolean)">
+            <summary>
+            Returns how many letters within partial can be matched into the full string
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.SystemExtensions.SkipCount(System.String,System.String)">
+            <summary>
+            Measures the amount of 'skipped letters' in a match
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.NativeProcess.Start(System.String)">
+            <summary>
+            Process.Start works differently in .Net Core compared to .Net Framework.
+            This wrapper method allows old Process.Start calls to work as expected.
+            </summary>
+        </member>
+        <member name="T:HavenSoft.HexManiac.Core.EditableValue`1">
+            <summary>
+            Represents a simple editable value with change notification.
+            </summary>
+        </member>
+        <member name="T:HavenSoft.HexManiac.Core.DictionaryDecorator`2">
+            <summary>
+            Original generated by auto-implement.
+            But had a generation error, so it's included in source.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.ICommandExtensions.Execute(System.Windows.Input.ICommand)">
+            <summary>
+            Runs execute on the command with a null parameter.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.ICommandExtensions.CanAlwaysExecute(System.Object)">
+            <summary>
+            Utility implementation of CanExecute for commands that can always execute.
+            </summary>
+        </member>
+        <member name="T:HavenSoft.HexManiac.Core.MethodCommand">
+            <summary>
+            Conventions-based ICommand implementation.
+            Given a name of an {Execute} method,
+            it searches for a Can{Execute} method and a Can{Execute}Changed event.
+            The Can{Execute} method and Can{Execute}Changed event are optional.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.MethodCommand.#ctor(System.Object,System.String,System.String,System.String)">
+            <param name="context">The object that has the members.</param>
+            <param name="executeMethodName">The name to use for the Execute method.</param>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.MethodCommand.CanExecute(System.Object)">
+            <summary>
+            Defaults to true if no Can{Execute} method is found.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.HexManiac.Core.Patcher.ApplyIPSPatch(HavenSoft.HexManiac.Core.Models.IDataModel,System.Byte[],HavenSoft.HexManiac.Core.Models.ModelDelta)">
+            <returns>The first offset that was edited</returns>
+        </member>
+        <member name="T:HavenSoft.AutoImplement.Delegation.ConstructionCompletion">
+            <summary>
+            When a caller Disposes of this object, it will call the constructor on the target object.
+            </summary>
+        </member>
+        <member name="M:HavenSoft.AutoImplement.Delegation.ConstructionCompletion.CreateObjectWithDeferredConstruction``1(``0@,System.Object[])">
+            <summary>
+            Create an uninitialized object and returns a disposable scope for working with it. When the scope is closed, the object's constructor is called.
+            </summary>
+            <typeparam name="T"></typeparam>
+            <param name="incompleteObject"></param>
+            <param name="constructorArguments"></param>
+            <returns></returns>
+        </member>
+        <member name="M:HavenSoft.AutoImplement.Delegation.ConstructionCompletion.Dispose">
+            <summary>
+            Finishes constructing the target object.
+            </summary>
+        </member>
+        <member name="T:HavenSoft.AutoImplement.Delegation.EventImplementation`1">
+            <summary>
+            EventImplementation can look like an event to the user, but allows you to add custom delegates for add/remove.
+            It also keeps track of the added handlers in a list, so that you can query them as needed.
+            </summary>
+        </member>
+        <member name="T:HavenSoft.AutoImplement.Delegation.PropertyImplementation`1">
+            <example>
+            this.MyProperty = new PropertyImplementation&lt;int&gt;();
+            
+            this.MyProperty.set = value => Console.WriteLine(value);
+            
+            this.MyProperty.get = () => 7;
+            
+            this.MyProperty.value = 4;
+            
+            this.MyProperty = 2;
+            
+            int number = this.MyProperty;
+            </example>
+            <remarks>
+            Implicitly casting a T to a new PropertyImplementation resets its delegates to the defaults.
+            </remarks>
+        </member>
+        <member name="M:HavenSoft.AutoImplement.Delegation.PropertyImplementation`1.op_Implicit(HavenSoft.AutoImplement.Delegation.PropertyImplementation{`0})~`0">
+            <summary>
+            Assigning a normal value from a PropertyImplementation will use any custom get delegate that you've setup.
+            If you haven't setup a custom get delegate, then the PropertyImplementation's value is used.
+            </summary>
+            <example>
+            var property = new PropertyImplementation&lt;int&gt;();
+            property.get = () => 4;
+            property.value = 7;
+            
+            int x = property; // x is now 4.
+            </example>
+        </member>
+        <member name="M:HavenSoft.AutoImplement.Delegation.PropertyImplementation`1.op_Implicit(`0)~HavenSoft.AutoImplement.Delegation.PropertyImplementation{`0}">
+            <summary>
+            Assigning a normal value to a PropertyImplementation will remove any get/set delegates you've added to the property implementation.
+            </summary>
+            <example>
+            var property = new PropertyImplementation&lt;int&gt;();
+            property = 7;
+            </example>
+        </member>
+        <member name="T:HavenSoft.AutoImplement.Delegation.EnumerableEqualityComparer`1">
+            <summary>
+            Provides a simple comparison implementation for enumerable things.
+            Used for creating dictionaries of implementations for generic methods (for stubs).
+            </summary>
+        </member>
+        <member name="M:HavenSoft.AutoImplement.Delegation.EnumerableEqualityComparer`1.Equals(System.Collections.Generic.IEnumerable{`0},System.Collections.Generic.IEnumerable{`0})">
+            <inheritdoc />
+        </member>
+        <member name="M:HavenSoft.AutoImplement.Delegation.EnumerableEqualityComparer`1.GetHashCode(System.Collections.Generic.IEnumerable{`0})">
+            <inheritdoc />
+        </member>
+        <member name="M:HexManiac.Core.Models.Runs.Factory.BlockmapRunContentStrategy.UpdateNewRunFromPointerFormat(HavenSoft.HexManiac.Core.Models.IDataModel,HavenSoft.HexManiac.Core.Models.ModelDelta,System.String,System.Collections.Generic.IReadOnlyList{HavenSoft.HexManiac.Core.Models.Runs.ArrayRunElementSegment},System.Int32,HavenSoft.HexManiac.Core.Models.Runs.IFormattedRun@)">
+            <summary>
+            Try to add a new BlockmapRun.
+            But fail to do so if the BlockmapRun would run over any of its pointers.
+            </summary>
+        </member>
+        <member name="M:HexManiac.Core.Models.Runs.Sprites.BlocksetModel.RenderBlockset(System.Double)">
+            <summary>
+            Create a full image of just this one blockset, without using tiles/palettes from another.
+            </summary>
+        </member>
+    </members>
+</doc>
