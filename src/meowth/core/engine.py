@@ -375,6 +375,40 @@ class TranslationEngine:
         return find_meowth_bridge()
 
     @staticmethod
+    def _find_resources_dir() -> Path | None:
+        """Find the resources directory in PyInstaller bundle or project root.
+
+        Returns:
+            Path to resources directory or None if not found.
+        """
+        import sys
+
+        # Strategy 1: Check if running in PyInstaller bundle
+        if getattr(sys, '_MEIPASS', None):
+            # PyInstaller extracts to temp dir, resources should be at bundle root
+            bundle_resources = Path(sys._MEIPASS) / "resources"
+            if bundle_resources.exists():
+                return bundle_resources
+
+        # Strategy 2: Check current directory (for app bundle)
+        cwd_resources = Path.cwd() / "resources"
+        if cwd_resources.exists():
+            return cwd_resources
+
+        # Strategy 3: Check relative to this file (development mode)
+        module_dir = Path(__file__).parent.parent.parent.parent  # up to project root
+        dev_resources = module_dir / "resources"
+        if dev_resources.exists():
+            return dev_resources
+
+        # Strategy 4: Check HexManiacAdvance submodule
+        hma_resources = module_dir / "HexManiacAdvance" / "src" / "HexManiac.Core" / "Models" / "Code"
+        if hma_resources.exists():
+            return hma_resources
+
+        return None
+
+    @staticmethod
     def extract_texts(rom_path: Path, output_path: Path) -> Path:
         """Extract texts from ROM using MeowthBridge."""
         import os
@@ -386,7 +420,25 @@ class TranslationEngine:
         work_parent = output_path.parent.parent  # output_path is work_dir/texts.json, so parent.parent is writable base
         os.chdir(work_parent)
 
+        # Ensure resources directory is accessible
+        resources_link = work_parent / "resources"
+        resources_created = False
         try:
+            # Find resources directory (PyInstaller bundle or project root)
+            resources_src = TranslationEngine._find_resources_dir()
+
+            # Create symlink or copy if resources not already present
+            if not resources_link.exists() and resources_src and resources_src.exists():
+                try:
+                    # Try symlink first (faster)
+                    os.symlink(str(resources_src), str(resources_link))
+                    resources_created = True
+                except (OSError, NotImplementedError):
+                    # Fallback to copy if symlink fails (e.g., Windows without admin)
+                    import shutil
+                    shutil.copytree(resources_src, resources_link)
+                    resources_created = True
+
             result = subprocess.run(
                 [str(exe), "extract", str(rom_path), "-o", str(output_path)],
                 capture_output=True, text=True,
@@ -405,6 +457,13 @@ class TranslationEngine:
             if not output_path.exists():
                 raise RuntimeError(Messages.MEOWTH_BRIDGE_NO_OUTPUT.format(path=output_path))
         finally:
+            # Clean up resources link if we created it
+            if resources_created and resources_link.exists():
+                if resources_link.is_symlink():
+                    resources_link.unlink()
+                else:
+                    import shutil
+                    shutil.rmtree(resources_link)
             os.chdir(original_cwd)
 
         _postprocess_fd_macros(output_path)
