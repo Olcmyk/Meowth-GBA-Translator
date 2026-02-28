@@ -109,6 +109,11 @@ jobs:
 
       - name: Create DMG
         run: |
+          # Clean up any existing files from previous runs
+          rm -rf dmg_content
+          rm -f "dist/Meowth-Translator-macOS.dmg"
+
+          # Create DMG
           mkdir -p dmg_content
           cp -r "dist/Meowth Translator.app" dmg_content/
           ln -s /Applications dmg_content/Applications
