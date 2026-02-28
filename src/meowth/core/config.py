@@ -1,6 +1,6 @@
 """Unified configuration management for translation pipeline."""
 
-import os
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -8,7 +8,7 @@ from pathlib import Path
 def _get_default_work_dir() -> Path:
     """Get default work directory in a writable location."""
     # For GUI apps, use user's home directory
-    if getattr(os, '_MEIPASS', None):  # Running in PyInstaller bundle
+    if getattr(sys, '_MEIPASS', None):  # Running in PyInstaller bundle
         return Path.home() / "Documents" / "Meowth" / "work"
     # For CLI, use current directory
     return Path("work")
@@ -17,7 +17,7 @@ def _get_default_work_dir() -> Path:
 def _get_default_output_dir() -> Path:
     """Get default output directory in a writable location."""
     # For GUI apps, use user's home directory
-    if getattr(os, '_MEIPASS', None):  # Running in PyInstaller bundle
+    if getattr(sys, '_MEIPASS', None):  # Running in PyInstaller bundle
         return Path.home() / "Documents" / "Meowth" / "outputs"
     # For CLI, use current directory
     return Path("outputs")
