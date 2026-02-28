@@ -175,6 +175,13 @@ class ConfigForm(ctk.CTkFrame):
         provider = self.provider.get()
         preset = PROVIDER_PRESETS.get(provider)
         api_key = self.api_key_entry.get().strip()
+
+        # If user selected output dir, put work dir next to it
+        output_dir = Path(self.output_entry.get()) if self.output_entry.get() else None
+        work_dir = None
+        if output_dir:
+            work_dir = output_dir.parent / "work"
+
         return TranslationConfig(
             source_lang=self._lang_name_to_code(self.source_lang.get()),
             target_lang=self._lang_name_to_code(self.target_lang.get()),
@@ -185,7 +192,8 @@ class ConfigForm(ctk.CTkFrame):
             batch_size=int(self.batch_size.get()) if self.batch_size.get().isdigit() else 30,
             max_workers=int(self.max_workers.get()) if self.max_workers.get().isdigit() else 10,
             rom_path=Path(self.rom_entry.get()) if self.rom_entry.get() else None,
-            output_dir=Path(self.output_entry.get()) if self.output_entry.get() else None,
+            output_dir=output_dir,
+            work_dir=work_dir,
         )
 
     def validate(self) -> tuple[bool, str]:
