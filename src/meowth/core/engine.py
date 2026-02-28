@@ -375,72 +375,24 @@ class TranslationEngine:
         return find_meowth_bridge()
 
     @staticmethod
-    def _find_resources_dir() -> Path | None:
-        """Find the resources directory in PyInstaller bundle or project root.
-
-        Returns:
-            Path to resources directory or None if not found.
-        """
-        import sys
-
-        # Strategy 1: Check if running in PyInstaller bundle
-        if getattr(sys, '_MEIPASS', None):
-            # PyInstaller extracts to temp dir, resources should be at bundle root
-            bundle_resources = Path(sys._MEIPASS) / "resources"
-            if bundle_resources.exists():
-                return bundle_resources
-
-        # Strategy 2: Check current directory (for app bundle)
-        cwd_resources = Path.cwd() / "resources"
-        if cwd_resources.exists():
-            return cwd_resources
-
-        # Strategy 3: Check relative to this file (development mode)
-        module_dir = Path(__file__).parent.parent.parent.parent  # up to project root
-        dev_resources = module_dir / "resources"
-        if dev_resources.exists():
-            return dev_resources
-
-        # Strategy 4: Check HexManiacAdvance submodule
-        hma_resources = module_dir / "HexManiacAdvance" / "src" / "HexManiac.Core" / "Models" / "Code"
-        if hma_resources.exists():
-            return hma_resources
-
-        return None
-
-    @staticmethod
     def extract_texts(rom_path: Path, output_path: Path) -> Path:
         """Extract texts from ROM using MeowthBridge."""
         import os
         exe = TranslationEngine.find_meowth_bridge()
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Change to output directory so MeowthBridge creates work/ there
+        # Run MeowthBridge in its own directory so it can find bundled resources
         original_cwd = Path.cwd()
-        work_parent = output_path.parent.parent  # output_path is work_dir/texts.json, so parent.parent is writable base
-        os.chdir(work_parent)
+        bridge_dir = exe.parent
+        os.chdir(bridge_dir)
 
-        # Ensure resources directory is accessible
-        resources_link = work_parent / "resources"
-        resources_created = False
         try:
-            # Find resources directory (PyInstaller bundle or project root)
-            resources_src = TranslationEngine._find_resources_dir()
-
-            # Create symlink or copy if resources not already present
-            if not resources_link.exists() and resources_src and resources_src.exists():
-                try:
-                    # Try symlink first (faster)
-                    os.symlink(str(resources_src), str(resources_link))
-                    resources_created = True
-                except (OSError, NotImplementedError):
-                    # Fallback to copy if symlink fails (e.g., Windows without admin)
-                    import shutil
-                    shutil.copytree(resources_src, resources_link)
-                    resources_created = True
+            # Use absolute paths for ROM and output since we changed directory
+            rom_abs = rom_path.resolve()
+            output_abs = output_path.resolve()
 
             result = subprocess.run(
-                [str(exe), "extract", str(rom_path), "-o", str(output_path)],
+                [str(exe), "extract", str(rom_abs)],
                 capture_output=True, text=True,
             )
             if result.returncode != 0:
@@ -449,21 +401,14 @@ class TranslationEngine:
                         code=result.returncode, stderr=result.stderr
                     )
                 )
-            # MeowthBridge hardcodes output to work/text.json
+            # MeowthBridge outputs to work/text.json in its directory
             hardcoded = Path("work/text.json")
-            if not output_path.exists() and hardcoded.exists():
+            if hardcoded.exists():
                 import shutil
-                shutil.move(str(hardcoded), str(output_path))
-            if not output_path.exists():
-                raise RuntimeError(Messages.MEOWTH_BRIDGE_NO_OUTPUT.format(path=output_path))
+                shutil.move(str(hardcoded), str(output_abs))
+            if not output_abs.exists():
+                raise RuntimeError(Messages.MEOWTH_BRIDGE_NO_OUTPUT.format(path=output_abs))
         finally:
-            # Clean up resources link if we created it
-            if resources_created and resources_link.exists():
-                if resources_link.is_symlink():
-                    resources_link.unlink()
-                else:
-                    import shutil
-                    shutil.rmtree(resources_link)
             os.chdir(original_cwd)
 
         _postprocess_fd_macros(output_path)
