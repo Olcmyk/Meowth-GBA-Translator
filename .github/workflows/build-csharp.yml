@@ -18,13 +18,8 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Initialize submodules
-        run: |
-          git submodule update --init HexManiacAdvance
-          git submodule update --init Pokemon_GBA_Font_Patch
-          git submodule update --init armips
-          git submodule update --init pokeapi
+        with:
+          submodules: recursive
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -54,13 +49,8 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Initialize submodules
-        run: |
-          git submodule update --init HexManiacAdvance
-          git submodule update --init Pokemon_GBA_Font_Patch
-          git submodule update --init armips
-          git submodule update --init pokeapi
+        with:
+          submodules: recursive
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -110,13 +100,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Initialize submodules
-        run: |
-          git submodule update --init HexManiacAdvance
-          git submodule update --init Pokemon_GBA_Font_Patch
-          git submodule update --init armips
-          git submodule update --init pokeapi
+        with:
+          submodules: recursive
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
