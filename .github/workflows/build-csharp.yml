@@ -30,6 +30,8 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force -Path resources
           Copy-Item -Path "HexManiacAdvance\src\HexManiac.Core\Models\Code\*.toml" -Destination resources\
+          Copy-Item -Path "HexManiacAdvance\src\HexManiac.Core\Models\Code\*.txt" -Destination resources\
+          Copy-Item -Path "HexManiacAdvance\src\HexManiac.Core\Models\Code\*.py" -Destination resources\
 
       - name: Build MeowthBridge
         run: |
@@ -65,6 +67,8 @@ jobs:
         run: |
           mkdir -p resources
           cp HexManiacAdvance/src/HexManiac.Core/Models/Code/*.toml resources/
+          cp HexManiacAdvance/src/HexManiac.Core/Models/Code/*.txt resources/
+          cp HexManiacAdvance/src/HexManiac.Core/Models/Code/*.py resources/
 
       - name: Build MeowthBridge (x64)
         run: |
@@ -122,6 +126,8 @@ jobs:
         run: |
           mkdir -p resources
           cp HexManiacAdvance/src/HexManiac.Core/Models/Code/*.toml resources/
+          cp HexManiacAdvance/src/HexManiac.Core/Models/Code/*.txt resources/
+          cp HexManiacAdvance/src/HexManiac.Core/Models/Code/*.py resources/
 
       - name: Build MeowthBridge
         run: |
