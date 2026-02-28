@@ -49,12 +49,8 @@ jobs:
           cp armips ../../tools/armips
           chmod +x ../../tools/armips
 
-      - name: Prepare resources directory
-        run: |
-          mkdir -p resources
-          cp HexManiacAdvance/src/HexManiac.Core/Models/Code/*.toml resources/
-          cp HexManiacAdvance/src/HexManiac.Core/Models/Code/*.txt resources/
-          cp HexManiacAdvance/src/HexManiac.Core/Models/Code/*.py resources/
+      - name: Prepare glossary directory
+        run: mkdir -p resources
 
       - name: Pre-build glossary JSON files
         run: |
@@ -161,13 +157,9 @@ jobs:
           mkdir -p ../../tools
           cp Release/armips.exe ../../tools/armips.exe
 
-      - name: Prepare resources directory
+      - name: Prepare glossary directory
         shell: bash
-        run: |
-          mkdir -p resources
-          cp HexManiacAdvance/src/HexManiac.Core/Models/Code/*.toml resources/
-          cp HexManiacAdvance/src/HexManiac.Core/Models/Code/*.txt resources/
-          cp HexManiacAdvance/src/HexManiac.Core/Models/Code/*.py resources/
+        run: mkdir -p resources
 
       - name: Pre-build glossary JSON files
         shell: bash

@@ -381,10 +381,26 @@ class TranslationEngine:
         exe = TranslationEngine.find_meowth_bridge()
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Run MeowthBridge in its own directory so it can find bundled resources
+        # Determine working directory for MeowthBridge
+        # - In packaged mode: MeowthBridge directory has bundled resources/
+        # - In dev mode: project root has resources/
         original_cwd = Path.cwd()
         bridge_dir = exe.parent
-        os.chdir(bridge_dir)
+
+        # Check if resources exists in bridge directory (packaged mode)
+        if (bridge_dir / "resources").exists():
+            work_dir = bridge_dir
+        else:
+            # Dev mode: use project root where resources/ exists
+            # Find project root by looking for HexManiacAdvance submodule
+            project_root = bridge_dir
+            while project_root.parent != project_root:
+                if (project_root / "HexManiacAdvance").exists():
+                    break
+                project_root = project_root.parent
+            work_dir = project_root
+
+        os.chdir(work_dir)
 
         try:
             # Use absolute paths for ROM and output since we changed directory
@@ -401,7 +417,7 @@ class TranslationEngine:
                         code=result.returncode, stderr=result.stderr
                     )
                 )
-            # MeowthBridge outputs to work/text.json in its directory
+            # MeowthBridge outputs to work/text.json in its working directory
             hardcoded = Path("work/text.json")
             if hardcoded.exists():
                 import shutil
