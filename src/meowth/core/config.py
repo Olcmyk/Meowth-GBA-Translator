@@ -7,16 +7,23 @@ from pathlib import Path
 
 def _get_default_work_dir() -> Path:
     """Get default work directory in a writable location."""
-    # For GUI apps, use user's home directory
+    # For GUI apps, use system cache directory
     if getattr(sys, '_MEIPASS', None):  # Running in PyInstaller bundle
-        return Path.home() / "Documents" / "Meowth" / "work"
+        if sys.platform == "darwin":
+            return Path.home() / "Library" / "Caches" / "Meowth" / "work"
+        elif sys.platform == "win32":
+            # Windows: use AppData/Local/Meowth/Cache
+            return Path.home() / "AppData" / "Local" / "Meowth" / "Cache" / "work"
+        else:
+            # Linux: use ~/.cache/Meowth
+            return Path.home() / ".cache" / "Meowth" / "work"
     # For CLI, use current directory
     return Path("work")
 
 
 def _get_default_output_dir() -> Path:
     """Get default output directory in a writable location."""
-    # For GUI apps, use user's home directory
+    # For GUI apps, use user's Documents directory
     if getattr(sys, '_MEIPASS', None):  # Running in PyInstaller bundle
         return Path.home() / "Documents" / "Meowth" / "outputs"
     # For CLI, use current directory
