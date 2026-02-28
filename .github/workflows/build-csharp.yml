@@ -32,16 +32,13 @@ jobs:
             -c Release `
             -r win-x64 `
             --self-contained true `
-            -p:PublishSingleFile=true `
-            -p:PublishTrimmed=true `
-            -p:IncludeNativeLibrariesForSelfExtract=true `
             -o build/windows
 
       - name: Upload Windows binary
         uses: actions/upload-artifact@v4
         with:
           name: meowth-bridge-windows
-          path: build/windows/MeowthBridge.exe
+          path: build/windows/
           retention-days: 7
 
   build-macos:
@@ -63,9 +60,6 @@ jobs:
             -c Release \
             -r osx-x64 \
             --self-contained true \
-            -p:PublishSingleFile=true \
-            -p:PublishTrimmed=true \
-            -p:IncludeNativeLibrariesForSelfExtract=true \
             -o build/macos-x64
 
       - name: Build MeowthBridge (arm64)
@@ -74,14 +68,14 @@ jobs:
             -c Release \
             -r osx-arm64 \
             --self-contained true \
-            -p:PublishSingleFile=true \
-            -p:PublishTrimmed=true \
-            -p:IncludeNativeLibrariesForSelfExtract=true \
             -o build/macos-arm64
 
       - name: Create universal binary
         run: |
           mkdir -p build/macos
+          # Copy all files from arm64 build
+          cp -r build/macos-arm64/* build/macos/
+          # Create universal binary for the main executable
           lipo -create \
             build/macos-x64/MeowthBridge \
             build/macos-arm64/MeowthBridge \
@@ -92,7 +86,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: meowth-bridge-macos
-          path: build/macos/MeowthBridge
+          path: build/macos/
           retention-days: 7
 
   build-linux:
@@ -114,9 +108,6 @@ jobs:
             -c Release \
             -r linux-x64 \
             --self-contained true \
-            -p:PublishSingleFile=true \
-            -p:PublishTrimmed=true \
-            -p:IncludeNativeLibrariesForSelfExtract=true \
             -o build/linux
 
       - name: Make executable
@@ -126,7 +117,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: meowth-bridge-linux
-          path: build/linux/MeowthBridge
+          path: build/linux/
           retention-days: 7
 
   combine-artifacts:

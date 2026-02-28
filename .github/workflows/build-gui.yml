@@ -92,8 +92,6 @@ jobs:
             --add-data "pokeapi/data/v2/csv:pokeapi/data/v2/csv" \
             --add-data "Pokemon_GBA_Font_Patch:Pokemon_GBA_Font_Patch" \
             --add-data "tools:tools" \
-            --add-data "src/meowth/binaries/macos/MeowthBridge:meowth/binaries/macos" \
-            --add-data "${{ steps.ctk.outputs.path }}:customtkinter" \
             --hidden-import customtkinter \
             --hidden-import PIL \
             --hidden-import click \
@@ -210,8 +208,6 @@ jobs:
             --add-data "pokeapi/data/v2/csv;pokeapi/data/v2/csv" \
             --add-data "Pokemon_GBA_Font_Patch;Pokemon_GBA_Font_Patch" \
             --add-data "tools;tools" \
-            --add-data "src/meowth/binaries/windows/MeowthBridge.exe;meowth/binaries/windows" \
-            --add-data "${{ steps.ctk.outputs.path }};customtkinter" \
             --hidden-import customtkinter \
             --hidden-import PIL \
             --hidden-import click \
