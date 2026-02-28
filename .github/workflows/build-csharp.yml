@@ -176,10 +176,18 @@ jobs:
         run: |
           echo "=== Windows ==="
           ls -lh binaries/windows/
+          echo "Windows resources:"
+          ls -la binaries/windows/resources/ || echo "No resources dir"
+          echo ""
           echo "=== macOS ==="
           ls -lh binaries/macos/
+          echo "macOS resources:"
+          ls -la binaries/macos/resources/ || echo "No resources dir"
+          echo ""
           echo "=== Linux ==="
           ls -lh binaries/linux/
+          echo "Linux resources:"
+          ls -la binaries/linux/resources/ || echo "No resources dir"
 
       - name: Upload combined binaries
         uses: actions/upload-artifact@v4

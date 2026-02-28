@@ -36,6 +36,18 @@ jobs:
           name: meowth-bridge-macos
           path: src/meowth/binaries/macos/
 
+      - name: Verify downloaded MeowthBridge structure
+        run: |
+          echo "=== MeowthBridge binary structure ==="
+          ls -la src/meowth/binaries/macos/
+          echo ""
+          echo "=== Resources directory ==="
+          ls -la src/meowth/binaries/macos/resources/ || echo "ERROR: resources directory not found!"
+          echo ""
+          echo "=== Check critical files ==="
+          test -f src/meowth/binaries/macos/resources/hma.py && echo "✓ hma.py found" || echo "✗ hma.py MISSING!"
+          test -f src/meowth/binaries/macos/resources/default.toml && echo "✓ default.toml found" || echo "✗ default.toml MISSING!"
+
       - name: Make MeowthBridge executable
         run: chmod +x src/meowth/binaries/macos/MeowthBridge
 
@@ -143,6 +155,19 @@ jobs:
         with:
           name: meowth-bridge-windows
           path: src/meowth/binaries/windows/
+
+      - name: Verify downloaded MeowthBridge structure
+        shell: bash
+        run: |
+          echo "=== MeowthBridge binary structure ==="
+          ls -la src/meowth/binaries/windows/
+          echo ""
+          echo "=== Resources directory ==="
+          ls -la src/meowth/binaries/windows/resources/ || echo "ERROR: resources directory not found!"
+          echo ""
+          echo "=== Check critical files ==="
+          test -f src/meowth/binaries/windows/resources/hma.py && echo "✓ hma.py found" || echo "✗ hma.py MISSING!"
+          test -f src/meowth/binaries/windows/resources/default.toml && echo "✓ default.toml found" || echo "✗ default.toml MISSING!"
 
       - name: Setup MSVC for armips
         uses: ilammy/msvc-dev-cmd@v1
