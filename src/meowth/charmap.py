@@ -3,9 +3,10 @@
 from pathlib import Path
 
 from .languages import is_latin_language, postprocess_for_language
+from .resource_path import get_resource_path
 
 # Default charmap path (Chinese font patch)
-DEFAULT_CHARMAP = Path(__file__).parent.parent.parent / "Pokemon_GBA_Font_Patch" / "pokeFRLG" / "PMRSEFRLG_charmap.txt"
+DEFAULT_CHARMAP = get_resource_path("Pokemon_GBA_Font_Patch/pokeFRLG/PMRSEFRLG_charmap.txt")
 
 
 class Charmap:

@@ -43,6 +43,18 @@ class ConfigForm(ctk.CTkFrame):
             rom_row, text="Browse", width=80, height=30, command=self._browse_rom
         ).pack(side="right")
 
+        # --- Row 1.5: Output Directory ---
+        ctk.CTkLabel(inner, text="Output Directory", font=("", 12, "bold")).pack(anchor="w")
+        output_row = ctk.CTkFrame(inner, fg_color="transparent")
+        output_row.pack(fill="x", pady=(2, 8))
+        self.output_entry = ctk.CTkEntry(
+            output_row, placeholder_text="Select output directory...", height=30
+        )
+        self.output_entry.pack(side="left", fill="x", expand=True, padx=(0, 8))
+        ctk.CTkButton(
+            output_row, text="Browse", width=80, height=30, command=self._browse_output
+        ).pack(side="right")
+
         # --- Row 2: Languages ---
         ctk.CTkLabel(inner, text="Languages", font=("", 12, "bold")).pack(anchor="w")
         lang_row = ctk.CTkFrame(inner, fg_color="transparent")
@@ -135,6 +147,15 @@ class ConfigForm(ctk.CTkFrame):
             self.rom_entry.delete(0, "end")
             self.rom_entry.insert(0, filename)
 
+    def _browse_output(self):
+        """Open directory dialog to select output directory."""
+        dirname = filedialog.askdirectory(
+            title="Select Output Directory",
+        )
+        if dirname:
+            self.output_entry.delete(0, "end")
+            self.output_entry.insert(0, dirname)
+
     def _toggle_advanced(self):
         """Toggle advanced settings visibility."""
         if self.advanced_visible:
@@ -164,6 +185,7 @@ class ConfigForm(ctk.CTkFrame):
             batch_size=int(self.batch_size.get()) if self.batch_size.get().isdigit() else 30,
             max_workers=int(self.max_workers.get()) if self.max_workers.get().isdigit() else 10,
             rom_path=Path(self.rom_entry.get()) if self.rom_entry.get() else None,
+            output_dir=Path(self.output_entry.get()) if self.output_entry.get() else None,
         )
 
     def validate(self) -> tuple[bool, str]:

@@ -2,6 +2,7 @@
 
 from pathlib import Path
 from .rom_analyzer import analyze_rom
+from .resource_path import get_resource_path
 
 
 def generate_dynamic_patch(rom_path: Path, output_dir: Path) -> Path:
@@ -92,7 +93,7 @@ def apply_dynamic_font_patch(
     asm_path = generate_dynamic_patch(rom_path, work_dir)
 
     # 复制必要的文件到工作目录
-    patch_root = Path(__file__).parent.parent.parent / "Pokemon_GBA_Font_Patch"
+    patch_root = get_resource_path("Pokemon_GBA_Font_Patch")
 
     # 复制 charmap
     shutil.copy2(

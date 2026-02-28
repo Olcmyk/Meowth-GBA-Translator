@@ -4,8 +4,10 @@ import shutil
 import subprocess
 from pathlib import Path
 
-_PATCH_ROOT = Path(__file__).parent.parent.parent / "Pokemon_GBA_Font_Patch"
-DEFAULT_ARMIPS = Path(__file__).parent.parent.parent / "tools" / "armips"
+from .resource_path import get_resource_path
+
+_PATCH_ROOT = get_resource_path("Pokemon_GBA_Font_Patch")
+DEFAULT_ARMIPS = get_resource_path("tools/armips")
 
 # Per-game configuration for the font patch
 _GAME_CONFIG: dict[str, dict] = {
