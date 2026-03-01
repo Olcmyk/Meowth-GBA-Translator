@@ -23,9 +23,5 @@ meowth-gui = "meowth.gui:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
-[tool.setuptools.package-data]
-meowth = [
-    "binaries/windows/*",
-    "binaries/macos/*",
-    "binaries/linux/*",
-]
+# Binary files are downloaded at runtime from GitHub releases
+# Do not include them in the PyPI package to keep size small

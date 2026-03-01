@@ -1,7 +1,9 @@
-# Include binary files in source distribution
-include src/meowth/binaries/windows/MeowthBridge.exe
-include src/meowth/binaries/macos/MeowthBridge
-include src/meowth/binaries/linux/MeowthBridge
+# Binary files are downloaded at runtime from GitHub releases
+# They are not included in the PyPI package to keep size small
+# exclude src/meowth/binaries/windows/MeowthBridge.exe
+# exclude src/meowth/binaries/macos/MeowthBridge
+# exclude src/meowth/binaries/linux/MeowthBridge
+recursive-exclude src/meowth/binaries *
 
 # Include documentation
 include README.md
