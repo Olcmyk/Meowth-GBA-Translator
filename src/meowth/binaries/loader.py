@@ -3,6 +3,10 @@
 import os
 import platform
 import sys
+import urllib.request
+import urllib.error
+import shutil
+import tempfile
 from pathlib import Path
 
 
@@ -92,21 +96,90 @@ def find_meowth_bridge() -> Path:
         if old_exe.exists():
             return old_exe
 
-    # Not found anywhere
-    raise FileNotFoundError(
-        f"MeowthBridge executable not found. Tried:\n"
-        f"  1. Environment variable MEOWTH_BRIDGE_PATH: {env_path or '(not set)'}\n"
-        f"  2. Bundled binary: {bundled_exe}\n"
-        f"  3. Development build: {meowth_bridge_dir / 'bin' / '{Release,Debug}' / 'net8.0' / exe_name}\n"
-        f"\n"
-        f"To fix this:\n"
-        f"  - If developing: Build MeowthBridge with 'dotnet build src/MeowthBridge -c Release'\n"
-        f"  - If using pip: This package may be missing the binary. Please report this issue.\n"
-        f"  - Set MEOWTH_BRIDGE_PATH environment variable to the executable path"
-    )
+    # Not found in standard locations, try downloading from GitHub
+    try:
+        return _download_meowth_bridge()
+    except Exception as download_error:
+        # If download fails, raise the original error
+        raise FileNotFoundError(
+            f"MeowthBridge executable not found. Tried:\n"
+            f"  1. Environment variable MEOWTH_BRIDGE_PATH: {env_path or '(not set)'}\n"
+            f"  2. Bundled binary: {bundled_exe}\n"
+            f"  3. Development build: {meowth_bridge_dir / 'bin' / '{Release,Debug}' / 'net8.0' / exe_name}\n"
+            f"  4. Download from GitHub: {download_error}\n"
+            f"\n"
+            f"To fix this:\n"
+            f"  - If developing: Build MeowthBridge with 'dotnet build src/MeowthBridge -c Release'\n"
+            f"  - If using pip: Check your internet connection or set MEOWTH_BRIDGE_PATH\n"
+            f"  - Set MEOWTH_BRIDGE_PATH environment variable to the executable path"
+        ) from download_error
 
 
-def get_binary_info() -> dict:
+
+
+def _download_meowth_bridge() -> Path:
+    """Download MeowthBridge binary from GitHub release if not found locally.
+
+    Returns:
+        Path to the downloaded executable
+
+    Raises:
+        FileNotFoundError: If download fails
+    """
+    import json
+
+    exe_name = get_executable_name()
+    platform_name = get_platform_name()
+
+    # Determine the binary URL based on platform
+    # Using latest release from GitHub
+    version = "v0.3.0"  # Can be updated to fetch latest
+    asset_name_map = {
+        "macos": "MeowthBridge-macos",
+        "windows": "MeowthBridge.exe",
+        "linux": "MeowthBridge-linux",
+    }
+    asset_name = asset_name_map.get(platform_name, exe_name)
+
+    # URL to the GitHub release
+    download_url = f"https://github.com/Olcmyk/Meowth-GBA-Translator/releases/download/{version}/{asset_name}"
+
+    # Create cache directory
+    cache_dir = Path.home() / ".meowth" / "binaries" / platform_name
+    cache_dir.mkdir(parents=True, exist_ok=True)
+
+    exe_path = cache_dir / exe_name
+
+    # If already cached, return it
+    if exe_path.exists():
+        if platform.system() != "Windows":
+            exe_path.chmod(0o755)
+        return exe_path
+
+    # Download the binary
+    print(f"Downloading MeowthBridge from GitHub... ({download_url})")
+
+    try:
+        with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
+            tmp_path = Path(tmp_file.name)
+
+            # Download with progress
+            urllib.request.urlretrieve(download_url, tmp_path)
+
+            # Move to cache
+            shutil.move(str(tmp_path), str(exe_path))
+
+            # Make executable on Unix
+            if platform.system() != "Windows":
+                exe_path.chmod(0o755)
+
+            print(f"Downloaded to {exe_path}")
+            return exe_path
+
+    except urllib.error.URLError as e:
+        raise FileNotFoundError(f"Failed to download MeowthBridge from {download_url}: {e}")
+    except Exception as e:
+        raise FileNotFoundError(f"Error downloading MeowthBridge: {e}")
     """Get information about the MeowthBridge binary.
 
     Returns:

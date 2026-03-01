@@ -1,9 +1,9 @@
 # Binary files are downloaded at runtime from GitHub releases
-# They are not included in the PyPI package to keep size small
-# exclude src/meowth/binaries/windows/MeowthBridge.exe
-# exclude src/meowth/binaries/macos/MeowthBridge
-# exclude src/meowth/binaries/linux/MeowthBridge
-recursive-exclude src/meowth/binaries *
+# Keep the binaries directory structure but exclude actual binary files
+include src/meowth/binaries/__init__.py
+include src/meowth/binaries/loader.py
+recursive-exclude src/meowth/binaries *.exe
+recursive-exclude src/meowth/binaries MeowthBridge
 
 # Include documentation
 include README.md

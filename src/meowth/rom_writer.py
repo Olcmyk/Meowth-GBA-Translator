@@ -86,7 +86,7 @@ class RomWriter:
         if available < self._MIN_FREE_BLOCK:
             print(f"Warning: only {available:,} bytes free before font boundary")
         self.write_offset = free_start
-        print(f"扩展区起始: 0x{free_start:08X} (可用 {available:,} 字节)")
+        print(f"Expansion region start: 0x{free_start:08X} ({available:,} bytes available)")
 
         # Load translations
         with open(translations_path, "r", encoding="utf-8") as f:
@@ -358,7 +358,7 @@ class RomWriter:
         if available < self._MIN_FREE_BLOCK:
             print(f"Warning: only {available:,} bytes free before font boundary")
         self.write_offset = free_start
-        print(f"扩展区起始: 0x{free_start:08X} (可用 {available:,} 字节)")
+        print(f"Expansion region start: 0x{free_start:08X} ({available:,} bytes available)")
 
         stats = {
             "in_place": 0, "relocated": 0, "skipped": 0,
