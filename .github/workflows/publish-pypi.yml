@@ -15,7 +15,8 @@ jobs:
   build-and-publish:
     name: Build and publish Python package
     runs-on: ubuntu-latest
-    environment: pypi
+    # Only use environment for release events (trusted publishing)
+    environment: ${{ github.event_name == 'release' && 'pypi' || '' }}
     permissions:
       id-token: write  # Required for trusted publishing
       contents: read
@@ -64,6 +65,7 @@ jobs:
         with:
           repository-url: https://test.pypi.org/legacy/
           skip-existing: true
+          password: ${{ secrets.TEST_PYPI_API_TOKEN }}
 
       - name: Publish to PyPI
         if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && !inputs.test-pypi)
