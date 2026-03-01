@@ -445,6 +445,11 @@ class TranslationEngine:
         if rom_path is None:
             raise ValueError("rom_path must be provided")
 
+        # Convert all paths to absolute to avoid issues with working directory changes
+        rom_path = Path(rom_path).resolve()
+        output_dir = Path(output_dir).resolve()
+        work_dir = Path(work_dir).resolve()
+
         # Auto-detect game
         detected = detect_game(rom_path)
         if detected != "unknown":

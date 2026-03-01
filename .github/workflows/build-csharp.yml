@@ -195,3 +195,64 @@ jobs:
           name: meowth-bridge-binaries
           path: binaries/
           retention-days: 30
+
+  upload-to-release:
+    name: Upload binaries to Release
+    runs-on: ubuntu-latest
+    needs: [build-windows, build-macos, build-linux]
+    if: github.event_name == 'release' || startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Download Windows binary
+        uses: actions/download-artifact@v4
+        with:
+          name: meowth-bridge-windows
+          path: binaries/windows
+
+      - name: Download macOS binary
+        uses: actions/download-artifact@v4
+        with:
+          name: meowth-bridge-macos
+          path: binaries/macos
+
+      - name: Download Linux binary
+        uses: actions/download-artifact@v4
+        with:
+          name: meowth-bridge-linux
+          path: binaries/linux
+
+      - name: Create standalone executables
+        run: |
+          # Windows - just the exe
+          cp binaries/windows/MeowthBridge.exe MeowthBridge-windows.exe
+
+          # macOS - universal binary
+          cp binaries/macos/MeowthBridge MeowthBridge-macos
+          chmod +x MeowthBridge-macos
+
+          # Linux
+          cp binaries/linux/MeowthBridge MeowthBridge-linux
+          chmod +x MeowthBridge-linux
+
+          # Verify files
+          ls -lh MeowthBridge-*
+
+      - name: Upload Windows binary to Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: MeowthBridge-windows.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload macOS binary to Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: MeowthBridge-macos
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload Linux binary to Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: MeowthBridge-linux
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

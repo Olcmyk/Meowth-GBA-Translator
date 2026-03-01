@@ -7,7 +7,22 @@ import urllib.request
 import urllib.error
 import shutil
 import tempfile
+import time
 from pathlib import Path
+
+
+def get_meowth_version() -> str:
+    """Get the current meowth package version.
+
+    Returns:
+        Version string (e.g., "0.3.1")
+    """
+    try:
+        import importlib.metadata
+        return importlib.metadata.version("meowth")
+    except Exception:
+        # Fallback for development mode
+        return "0.3.1"
 
 
 def get_platform_name() -> str:
@@ -126,23 +141,24 @@ def _download_meowth_bridge() -> Path:
     Raises:
         FileNotFoundError: If download fails
     """
-    import json
-
     exe_name = get_executable_name()
     platform_name = get_platform_name()
 
-    # Determine the binary URL based on platform
-    # Using latest release from GitHub
-    version = "v0.3.0"  # Can be updated to fetch latest
+    # Get current version
+    version = get_meowth_version()
+
+    # Determine the asset name based on platform
     asset_name_map = {
         "macos": "MeowthBridge-macos",
-        "windows": "MeowthBridge.exe",
+        "windows": "MeowthBridge-windows.exe",
         "linux": "MeowthBridge-linux",
     }
-    asset_name = asset_name_map.get(platform_name, exe_name)
+    asset_name = asset_name_map.get(platform_name)
+    if not asset_name:
+        raise FileNotFoundError(f"Unsupported platform: {platform_name}")
 
     # URL to the GitHub release
-    download_url = f"https://github.com/Olcmyk/Meowth-GBA-Translator/releases/download/{version}/{asset_name}"
+    download_url = f"https://github.com/Olcmyk/Meowth-GBA-Translator/releases/download/v{version}/{asset_name}"
 
     # Create cache directory
     cache_dir = Path.home() / ".meowth" / "binaries" / platform_name
@@ -157,29 +173,105 @@ def _download_meowth_bridge() -> Path:
         return exe_path
 
     # Download the binary
-    print(f"Downloading MeowthBridge from GitHub... ({download_url})")
+    print(f"🔽 First-time setup: Downloading MeowthBridge for {platform_name}...")
+    print(f"   Source: {download_url}")
 
     try:
-        with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
-            tmp_path = Path(tmp_file.name)
+        _download_with_progress_and_retry(download_url, exe_path)
 
-            # Download with progress
-            urllib.request.urlretrieve(download_url, tmp_path)
+        # Make executable on Unix
+        if platform.system() != "Windows":
+            exe_path.chmod(0o755)
 
-            # Move to cache
-            shutil.move(str(tmp_path), str(exe_path))
+        print(f"✅ Downloaded and cached to {exe_path}")
+        print(f"   (Subsequent runs will use the cached version)")
+        return exe_path
 
-            # Make executable on Unix
-            if platform.system() != "Windows":
-                exe_path.chmod(0o755)
-
-            print(f"Downloaded to {exe_path}")
-            return exe_path
-
-    except urllib.error.URLError as e:
-        raise FileNotFoundError(f"Failed to download MeowthBridge from {download_url}: {e}")
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            raise FileNotFoundError(
+                f"MeowthBridge binary not found in release v{version}.\n"
+                f"URL: {download_url}\n\n"
+                f"This usually means:\n"
+                f"  1. The release hasn't been published yet\n"
+                f"  2. The binary wasn't uploaded to the release\n\n"
+                f"Workaround:\n"
+                f"  Set MEOWTH_BRIDGE_PATH environment variable to a local binary:\n"
+                f"  export MEOWTH_BRIDGE_PATH=/path/to/MeowthBridge"
+            )
+        else:
+            raise FileNotFoundError(f"HTTP error {e.code} downloading from {download_url}: {e}")
     except Exception as e:
-        raise FileNotFoundError(f"Error downloading MeowthBridge: {e}")
+        raise FileNotFoundError(f"Failed to download MeowthBridge: {e}")
+
+
+def _download_with_progress_and_retry(url: str, dest: Path, max_retries: int = 3):
+    """Download file with progress display and retry logic.
+
+    Args:
+        url: URL to download from
+        dest: Destination file path
+        max_retries: Maximum number of retry attempts
+
+    Raises:
+        Exception: If download fails after all retries
+    """
+    for attempt in range(1, max_retries + 1):
+        try:
+            _download_with_progress(url, dest)
+            return  # Success
+        except Exception as e:
+            if attempt < max_retries:
+                print(f"   ⚠️  Download failed (attempt {attempt}/{max_retries}): {e}")
+                print(f"   🔄 Retrying in 2 seconds...")
+                time.sleep(2)
+            else:
+                raise  # Final attempt failed
+
+
+def _download_with_progress(url: str, dest: Path):
+    """Download file with progress display.
+
+    Args:
+        url: URL to download from
+        dest: Destination file path
+    """
+    with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
+        tmp_path = Path(tmp_file.name)
+
+        try:
+            response = urllib.request.urlopen(url, timeout=30)
+            total_size = int(response.headers.get('content-length', 0))
+
+            downloaded = 0
+            chunk_size = 8192
+            last_percent = -1
+
+            with open(tmp_path, 'wb') as f:
+                while True:
+                    chunk = response.read(chunk_size)
+                    if not chunk:
+                        break
+                    f.write(chunk)
+                    downloaded += len(chunk)
+
+                    # Show progress
+                    if total_size > 0:
+                        percent = int((downloaded / total_size) * 100)
+                        if percent != last_percent and percent % 10 == 0:
+                            mb_downloaded = downloaded / (1024 * 1024)
+                            mb_total = total_size / (1024 * 1024)
+                            print(f"   [{percent:3d}%] {mb_downloaded:.1f} MB / {mb_total:.1f} MB")
+                            last_percent = percent
+
+            # Move to final destination
+            shutil.move(str(tmp_path), str(dest))
+
+        except Exception as e:
+            # Clean up temp file on error
+            if tmp_path.exists():
+                tmp_path.unlink()
+            raise
     """Get information about the MeowthBridge binary.
 
     Returns:
