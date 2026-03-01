@@ -12,14 +12,9 @@ on:
         default: true
 
 jobs:
-  build-binaries:
-    name: Build C# binaries
-    uses: ./.github/workflows/build-csharp.yml
-
   build-and-publish:
     name: Build and publish Python package
     runs-on: ubuntu-latest
-    needs: build-binaries
     environment: pypi
     permissions:
       id-token: write  # Required for trusted publishing
@@ -45,39 +40,23 @@ jobs:
           python -m pip install --upgrade pip
           pip install build twine
 
-      - name: Download compiled binaries
-        uses: actions/download-artifact@v4
-        with:
-          name: meowth-bridge-binaries
-          path: src/meowth/binaries/
-
-      - name: Verify binaries
-        run: |
-          echo "=== Checking downloaded binaries ==="
-          ls -lhR src/meowth/binaries/
-          echo ""
-          echo "=== Windows binary ==="
-          file src/meowth/binaries/windows/MeowthBridge.exe || echo "Windows binary not found"
-          echo ""
-          echo "=== macOS binary ==="
-          file src/meowth/binaries/macos/MeowthBridge || echo "macOS binary not found"
-          echo ""
-          echo "=== Linux binary ==="
-          file src/meowth/binaries/linux/MeowthBridge || echo "Linux binary not found"
-
-      - name: Make binaries executable
-        run: |
-          chmod +x src/meowth/binaries/macos/MeowthBridge || true
-          chmod +x src/meowth/binaries/linux/MeowthBridge || true
-
       - name: Build package
         run: python -m build
 
-      - name: Check package contents
+      - name: Check package size
         run: |
-          echo "=== Package contents ==="
-          tar -tzf dist/*.tar.gz | grep -E "(MeowthBridge|binaries)" || echo "No binaries found in source distribution"
-          unzip -l dist/*.whl | grep -E "(MeowthBridge|binaries)" || echo "No binaries found in wheel"
+          echo "=== Package size check ==="
+          ls -lh dist/
+          echo ""
+          echo "=== Wheel size ==="
+          du -h dist/*.whl
+          echo ""
+          echo "=== Source distribution size ==="
+          du -h dist/*.tar.gz
+          echo ""
+          echo "=== Verifying no binaries in package ==="
+          tar -tzf dist/*.tar.gz | grep -E "MeowthBridge" && echo "❌ ERROR: Binaries found in package!" || echo "✅ No binaries found (correct)"
+          unzip -l dist/*.whl | grep -E "MeowthBridge" && echo "❌ ERROR: Binaries found in wheel!" || echo "✅ No binaries found (correct)"
 
       - name: Publish to TestPyPI
         if: github.event_name == 'workflow_dispatch' && inputs.test-pypi
