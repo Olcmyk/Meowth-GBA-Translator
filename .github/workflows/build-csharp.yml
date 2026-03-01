@@ -39,9 +39,7 @@ jobs:
             -c Release `
             -r win-x64 `
             --self-contained true `
-            -p:PublishSingleFile=true `
             -p:PublishTrimmed=false `
-            -p:IncludeNativeLibrariesForSelfExtract=true `
             -o build/windows
           Copy-Item -Recurse -Path resources -Destination build\windows\
 
@@ -78,9 +76,7 @@ jobs:
             -c Release \
             -r osx-x64 \
             --self-contained true \
-            -p:PublishSingleFile=true \
             -p:PublishTrimmed=false \
-            -p:IncludeNativeLibrariesForSelfExtract=true \
             -o build/macos-x64
 
       - name: Build MeowthBridge (arm64)
@@ -89,9 +85,7 @@ jobs:
             -c Release \
             -r osx-arm64 \
             --self-contained true \
-            -p:PublishSingleFile=true \
             -p:PublishTrimmed=false \
-            -p:IncludeNativeLibrariesForSelfExtract=true \
             -o build/macos-arm64
 
       - name: Create universal binary
@@ -141,9 +135,7 @@ jobs:
             -c Release \
             -r linux-x64 \
             --self-contained true \
-            -p:PublishSingleFile=true \
             -p:PublishTrimmed=false \
-            -p:IncludeNativeLibrariesForSelfExtract=true \
             -o build/linux
           cp -r resources build/linux/
 
@@ -230,42 +222,36 @@ jobs:
           name: meowth-bridge-linux
           path: binaries/linux
 
-      - name: Create standalone executables
+      - name: Create ZIP packages
         run: |
-          # Windows - single file executable
-          cp binaries/windows/MeowthBridge.exe MeowthBridge-windows.exe
+          # Create ZIP archives with all dependencies
+          cd binaries/windows && zip -r ../../MeowthBridge-windows.zip . && cd ../..
+          cd binaries/macos && zip -r ../../MeowthBridge-macos.zip . && cd ../..
+          cd binaries/linux && zip -r ../../MeowthBridge-linux.zip . && cd ../..
 
-          # macOS - universal binary (single file)
-          cp binaries/macos/MeowthBridge MeowthBridge-macos
-          chmod +x MeowthBridge-macos
-
-          # Linux - single file executable
-          cp binaries/linux/MeowthBridge MeowthBridge-linux
-          chmod +x MeowthBridge-linux
-
-          # Verify files
-          ls -lh MeowthBridge-*
+          # Verify packages
+          ls -lh MeowthBridge-*.zip
           echo ""
-          echo "File sizes (should be 40-80 MB each with PublishSingleFile):"
-          du -h MeowthBridge-*
+          echo "Package sizes:"
+          du -h MeowthBridge-*.zip
 
       - name: Upload Windows binary to Release
         uses: softprops/action-gh-release@v1
         with:
-          files: MeowthBridge-windows.exe
+          files: MeowthBridge-windows.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload macOS binary to Release
         uses: softprops/action-gh-release@v1
         with:
-          files: MeowthBridge-macos
+          files: MeowthBridge-macos.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload Linux binary to Release
         uses: softprops/action-gh-release@v1
         with:
-          files: MeowthBridge-linux
+          files: MeowthBridge-linux.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

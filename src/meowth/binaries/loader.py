@@ -8,6 +8,7 @@ import urllib.error
 import shutil
 import tempfile
 import time
+import zipfile
 from pathlib import Path
 
 
@@ -147,11 +148,11 @@ def _download_meowth_bridge() -> Path:
     # Get current version
     version = get_meowth_version()
 
-    # Determine the asset name based on platform
+    # Determine the ZIP asset name based on platform
     asset_name_map = {
-        "macos": "MeowthBridge-macos",
-        "windows": "MeowthBridge-windows.exe",
-        "linux": "MeowthBridge-linux",
+        "macos": "MeowthBridge-macos.zip",
+        "windows": "MeowthBridge-windows.zip",
+        "linux": "MeowthBridge-linux.zip",
     }
     asset_name = asset_name_map.get(platform_name)
     if not asset_name:
@@ -172,18 +173,30 @@ def _download_meowth_bridge() -> Path:
             exe_path.chmod(0o755)
         return exe_path
 
-    # Download the binary
+    # Download the ZIP file
     print(f"🔽 First-time setup: Downloading MeowthBridge for {platform_name}...")
     print(f"   Source: {download_url}")
 
     try:
-        _download_with_progress_and_retry(download_url, exe_path)
+        # Download to temporary file
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.zip') as tmp_file:
+            tmp_zip_path = Path(tmp_file.name)
+
+        _download_with_progress_and_retry(download_url, tmp_zip_path)
+
+        # Extract ZIP to cache directory
+        print(f"📦 Extracting files...")
+        with zipfile.ZipFile(tmp_zip_path, 'r') as zip_ref:
+            zip_ref.extractall(cache_dir)
+
+        # Clean up temporary ZIP file
+        tmp_zip_path.unlink()
 
         # Make executable on Unix
         if platform.system() != "Windows":
             exe_path.chmod(0o755)
 
-        print(f"✅ Downloaded and cached to {exe_path}")
+        print(f"✅ Downloaded and cached to {cache_dir}")
         print(f"   (Subsequent runs will use the cached version)")
         return exe_path
 
@@ -197,7 +210,7 @@ def _download_meowth_bridge() -> Path:
                 f"  2. The binary wasn't uploaded to the release\n\n"
                 f"Workaround:\n"
                 f"  Set MEOWTH_BRIDGE_PATH environment variable to a local binary:\n"
-                f"  export MEOWTH_BRIDGE_PATH=/path/to/MeowthBridge"
+              t MEOWTH_BRIDGE_PATH=/path/to/MeowthBridge"
             )
         else:
             raise FileNotFoundError(f"HTTP error {e.code} downloading from {download_url}: {e}")
