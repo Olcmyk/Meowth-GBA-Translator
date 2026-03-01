@@ -9,6 +9,8 @@ jobs:
   build-binaries:
     name: Build C# binaries
     uses: ./.github/workflows/build-csharp.yml
+    permissions:
+      contents: write  # Required for upload-to-release job
 
   build-macos:
     name: Build macOS App
