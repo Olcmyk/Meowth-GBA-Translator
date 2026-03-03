@@ -8,64 +8,35 @@
 
 **语言** | [English](./README.md) | [Français](./README.fr.md) | [Deutsch](./README.de.md) | [Italiano](./README.it.md) | [Español](./README.es.md)
 
-🐱 使用 LLM 驱动的智能 GBA 宝可梦 ROM 翻译工具，提供 GUI 和 CLI 两种界面
+使用 LLM 驱动的智能 GBA 宝可梦 ROM 翻译工具，提供 GUI 和 CLI 两种界面
 
 </div>
 
 ---
 
-## 📋 项目简介
+## 项目简介
 
 **Meowth GBA 翻译工具**是一款专为宝可梦Game Boy Advance (GBA) ROM 翻译而设计的综合工具。它结合了自动文本提取、AI驱动的智能翻译和ROM构建功能，大大简化了翻译流程。
 
 ### 主要特点
 
-- 🎮 **双界面支持**：提供用户友好的 GUI 和强大的 CLI
-- 🤖 **AI翻译**：支持 11+ 个 LLM 提供商（OpenAI、DeepSeek、Google Gemini 等）
-- 📦 **跨平台**：支持 macOS、Windows、Linux
-- 🌍 **多语言翻译**：翻译到任何语言（包括针对中文、日文、西班牙文等的优化模板）
-- ⚡ **高效工作流**：一条命令完成提取 → 翻译 → 构建
-- 🎁 **完全免费**：100% 开源，MIT 协议
-- 🔤 **智能字库**：支持的语言自动注入字库
+- **双界面支持**：提供用户友好的 GUI 和强大的 CLI
+- **AI翻译**：支持 11+ 个 LLM 提供商（OpenAI、DeepSeek、Google Gemini 等）
+- **跨平台**：支持 macOS、Windows、Linux
+- **六种语言支持**：英语、西班牙语、法语、德语、意大利语、中文
+- **高效工作流**：一条命令完成提取 → 翻译 → 构建
+- **完全免费**：100% 开源，MIT 协议
+- **智能字库**：中文翻译自动注入字库
 
-### ⚠️ 重要提示：翻译方式说明
 
-> **⚠️ 仅支持二进制改版，不支持反编译改版**
->
-> 本工具只支持**二进制改版**方式：
-> - ✅ 从原始 ROM 提取文本 → 翻译 → 插入翻译回 ROM
-> - ❌ **不兼容反编译项目**（如宝可梦绿宝石反编译）
-> - ❌ 反编译项目的字库注入困难/不可能，因为项目结构差异很大
->
-> **如果你的目标 ROM 是反编译项目，请使用该项目特定的工具和方法，而不是本工具。**
-
-### 为什么只支持二进制改版？
-
-1. **字库注入困难**：反编译项目有自己的字库系统和构建流程，与原生 ROM 完全不同
-2. **兼容性问题**：反编译项目的文本系统和代码结构与原生 ROM 差异巨大
-3. **维护成本**：支持反编译需要针对每个项目单独开发和维护
-4. **推荐方案**：反编译项目有各自成熟的本地化工具，应该使用这些工具
-
-### 项目兼容性
-
-| ROM 类型 | 支持情况 | 说明 |
-|---------|--------|------|
-| 原始官方 ROM | ✅ 完全支持 | 本工具设计目标 |
-| 简单汉化ROM | ✅ 完全支持 | 二进制改版，无反编译 |
-| 宝可梦绿宝石反编 | ❌ 不支持 | 使用反编译项目自己的工具 |
-| Pokémon Emerald Decomp | ❌ 不支持 | 使用该项目的本地化方案 |
-| 其他反编译项目 | ❌ 不支持 | 这类项目需要各自的工具 |
-
----
-
-## 📦 安装
+## 安装
 
 ### 方式1：GUI 应用（推荐大多数用户）
 
 下载最新版本：
 
-- 🍎 **macOS**：[Meowth-Translator-macOS.dmg](https://github.com/Olcmyk/Meowth-GBA-Translator/releases)
-- 🪟 **Windows**：[Meowth-Translator-Windows.zip](https://github.com/Olcmyk/Meowth-GBA-Translator/releases)
+- **macOS**：[Meowth-Translator-macOS.dmg](https://github.com/Olcmyk/Meowth-GBA-Translator/releases)
+- **Windows**：[Meowth-Translator-Windows.zip](https://github.com/Olcmyk/Meowth-GBA-Translator/releases)
 
 **系统要求**：
 - macOS 10.13+ 或 Windows 10+
@@ -108,9 +79,11 @@ meowth full pokemon.gba --provider deepseek
 
 ---
 
-## 🚀 快速开始
+## 快速开始
 
 ### 使用 GUI（最简单）
+
+![GUI 截图](images/gui-screenshot.png)
 
 1. 下载并运行 **Meowth 翻译工具**
 2. 点击"选择 ROM"，选择你的 GBA 宝可梦 ROM
@@ -122,12 +95,27 @@ meowth full pokemon.gba --provider deepseek
 5. 等待完成（通常 5-30 分钟，取决于 ROM 大小）
 6. 从输出文件夹下载翻译后的 ROM
 
+![翻译对比](images/translation-comparison.jpg)
+*左：原版游戏 | 右：翻译后游戏*
+
 ### 使用 CLI
 
+#### 步骤1：配置 API 密钥
+
+首先，设置 API 密钥环境变量：
+
 ```bash
-# 设置 API 密钥（示例：DeepSeek）
+# DeepSeek（推荐）
 export DEEPSEEK_API_KEY="sk-你的密钥"
 
+# 或其他提供商
+export OPENAI_API_KEY="sk-你的密钥"
+export GOOGLE_API_KEY="你的密钥"
+```
+
+#### 步骤2：运行翻译
+
+```bash
 # 运行完整翻译流程
 meowth full pokemon_firered.gba \
   --provider deepseek \
@@ -140,27 +128,27 @@ meowth full pokemon_firered.gba \
 
 ---
 
-## 🤖 支持的 LLM 提供商
+## 支持的 LLM 提供商
 
-| 提供商 | 默认模型 | API 密钥 | 价格 |
-|-------|---------|--------|------|
-| **DeepSeek** | deepseek-chat | `DEEPSEEK_API_KEY` | 💰 超便宜 |
-| **OpenAI** | gpt-4o | `OPENAI_API_KEY` | 💰💰 中等 |
-| **Google Gemini** | gemini-2.0-flash | `GOOGLE_API_KEY` | 🆓 免费额度 |
-| **Claude（Anthropic）** | claude-sonnet-4 | `ANTHROPIC_API_KEY` | 💰💰 中等 |
-| **Groq** | llama-3.3-70b | `GROQ_API_KEY` | 🆓 免费 |
-| **Mistral** | mistral-large-latest | `MISTRAL_API_KEY` | 💰 便宜 |
-| **OpenRouter** | openai/gpt-4o | `OPENROUTER_API_KEY` | 💰 浮动 |
-| **硅基流动** | DeepSeek-V3 | `SILICONFLOW_API_KEY` | 💰 超便宜 |
-| **智谱 GLM** | glm-4-flash | `ZHIPU_API_KEY` | 💰 便宜 |
-| **Moonshot** | moonshot-v1-8k | `MOONSHOT_API_KEY` | 💰 便宜 |
-| **通义千问** | qwen-plus | `DASHSCOPE_API_KEY` | 💰 便宜 |
+| 提供商 | 默认模型 | API 密钥 |
+|-------|---------|--------|
+| **DeepSeek** | deepseek-chat | `DEEPSEEK_API_KEY` |
+| **OpenAI** | gpt-4o | `OPENAI_API_KEY` |
+| **Google Gemini** | gemini-2.0-flash | `GOOGLE_API_KEY` |
+| **Claude（Anthropic）** | claude-sonnet-4 | `ANTHROPIC_API_KEY` |
+| **Groq** | llama-3.3-70b | `GROQ_API_KEY` |
+| **Mistral** | mistral-large-latest | `MISTRAL_API_KEY` |
+| **OpenRouter** | openai/gpt-4o | `OPENROUTER_API_KEY` |
+| **硅基流动**|DeepSeek-V3 | `SILICONFLOW_API_KEY` |
+| **智谱 GLM** | glm-4-flash | `ZHIPU_API_KEY` |
+| **Moonshot** | moonshot-v1-8k | `MOONSHOT_API_KEY` |
+| **通义千问** | qwen-plus | `DASHSCOPE_API_KEY` |
 
-**推荐**：从 **DeepSeek**（最便宜）或 **Google Gemini**（有免费额度）开始
+**推荐**：我们推荐使用 **DeepSeek**，因为本工具在开发和测试时一直使用 DeepSeek。翻译一个典型的 GBA 宝可梦 ROM 大约需要 2 元人民币。
 
 ---
 
-## 📖 使用指南
+## 使用指南
 
 ### CLI 命令
 
@@ -244,32 +232,20 @@ GUI 提供友好的界面，包括：
 
 ---
 
-## 🌍 支持的语言
+## 支持的语言
 
-工具为每种目标语言使用优化的提示模板：
+目前支持的语言：
 
-### 完全优化的语言
+- **英语** - `en`
+- **西班牙语** - `es`
+- **法语** - `fr`
+- **德语** - `de`
+- **意大利语** - `it`
+- **中文** - `zh-Hans`
 
-- 🇨🇳 **简体中文** - `zh-Hans`
-- 🇨🇳 **繁體中文** - `zh-Hant`
-- 🇯🇵 **日语** - `ja`
+**重要**：翻译为中文时，只支持二进制改版 ROM，不支持反编译项目。其他语言组合没有此限制。
 
-### 支持的语言
-
-- 🇬🇧 **英语** - `en`
-- 🇪🇸 **西班牙语** - `es`
-- 🇫🇷 **法语** - `fr`
-- 🇩🇪 **德语** - `de`
-- 🇮🇹 **意大利语** - `it`
-- 🇵🇹 **葡萄牙语** - `pt`
-- 🇷🇺 **俄语** - `ru`
-- 🇰🇷 **韩语** - `ko`
-
-或任何其他语言（使用通用模板）
-
----
-
-## ⚙️ 配置
+## 配置
 
 ### 环境变量
 
@@ -301,9 +277,8 @@ key_env = "DEEPSEEK_API_KEY"       # API 密钥的环境变量名
 base_url = "https://api.deepseek.com/v1"  # API 端点地址
 ```
 
----
 
-## 🔧 高级用法
+## 高级用法
 
 ### 使用自定义模型
 
@@ -369,25 +344,19 @@ meowth full pokemon.gba \
   --target zh-Hans
 ```
 
----
 
-## 🎮 支持的游戏
+## 支持的游戏
 
 本工具已在以下游戏中测试过：
 
-- 宝可梦 红宝石/蓝宝石
-- 宝可梦 绿叶
-- 宝可梦 火红
-- 宝可梦 祖母绿
-- 宝可梦 不可思议地牢：赤之救队
+- 宝可梦 Gaia v3.2
+- 宝可梦 SeaGlass v3.0
+- 宝可梦 Rogue Ex v2.0.1a
 
 其他 GBA 宝可梦游戏应该也能工作，但可能需要调整。
 
-> **注意**：本工具仅支持**二进制改版**。如果你的目标是反编译 ROM（如宝可梦绿宝石反编译），请使用反编译项目特定的工具。
 
----
-
-## 🐛 故障排除
+## 故障排除
 
 ### "找不到 MeowthBridge"
 - **原因**：应用程序文件损坏或安装不完整
@@ -400,32 +369,25 @@ meowth full pokemon.gba \
   export DEEPSEEK_API_KEY="sk-你的实际密钥"
   ```
 
-### "翻译质量很差"
-- **原因**：模型可能不适合目标语言
-- **解决方案**：尝试更强大的模型：
-  ```bash
-  meowth full pokemon.gba --provider openai --model gpt-4o --target zh-Hans
-  ```
-
 ### GUI 无法启动（macOS）
-- **原因**：首次运行的安全限制
+- **原因**：macOS 首次运行的安全限制
 - **解决方案**：
-  1. 打开应用程序文件夹
-  2. 右键点击"Meowth 翻译工具"
-  3. 选择"打开"（忽略安全警告）
+  1. 前往"系统设置" → "隐私与安全性"
+  2. 找到关于"Meowth Translator"被阻止的消息
+  3. 点击"仍要打开"
 
 ### "ROM 提取失败"
 - **原因**：ROM 可能损坏或格式不支持
 - **解决方案**：
   1. 验证 ROM 是有效的 GBA 文件
-  2. 确保 ROM 不是反编译项目
+  2. 如果要翻译为中文，请确保 ROM 不是反编译项目
   3. 先用已知有效的 ROM 测试
 
 更多帮助，请查看 [GitHub Issues](https://github.com/Olcmyk/Meowth-GBA-Translator/issues)
 
 ---
 
-## 📝 翻译过程说明
+## 翻译过程说明
 
 ### 第1阶段：提取（meowth extract）
 - 扫描 ROM 查找可翻译的文本
@@ -442,60 +404,47 @@ meowth full pokemon.gba \
 
 ### 第3阶段：构建（meowth build）
 - 将翻译文本注入回 ROM
-- 应用字库补丁（如需要）
+- 对于中文：应用字库补丁（必需）
 - 创建最终翻译 ROM
 - 输出：`pokemon_zh.gba`
 - 耗时：约 1 分钟
 
 ---
 
-## 💡 获得最佳效果的建议
-
-1. **先用测试 ROM**：先用小 ROM 或已知 ROM 测试
-2. **使用中文优化模板**：中文翻译使用专门优化的提示
-3. **监控 API 成本**：从 DeepSeek 或免费额度提供商开始
-4. **保持翻译简洁**：简短的翻译通常质量更好
-5. **在模拟器上测试**：始终在 GBA 模拟器或主机上测试翻译后的 ROM
-6. **备份原始文件**：始终妥善保管原始 ROM
-
----
-
-## 🤝 贡献
-
-欢迎贡献！你可以帮助的领域：
-
-- 添加对更多宝可梦游戏的支持
-- 改进特定语言的翻译质量
-- 添加新的 LLM 提供商
-- 改进 GUI/UX
-- 编写文档
-
-查看 [开发设置](./docs/DEVELOPMENT.md) 了解详情
-
----
-
-## 📄 许可证
+## 许可证
 
 本项目采用 MIT 许可证 - 查看 [LICENSE](LICENSE) 文件了解详情
 
 ---
 
-## 🙏 致谢
+## 致谢
 
 本项目使用了以下项目：
 
 - [HexManiacAdvance](https://github.com/entropyus/HexManiacAdvance) - ROM 提取和注入
+- [Pokemon_GBA_Font_Patch](https://github.com/Wokann/Pokemon_GBA_Font_Patch) - 中文字库补丁
 - [customtkinter](https://github.com/TomSchimansky/CustomTkinter) - 现代 GUI 框架
 - [click](https://click.palletsprojects.com/) - CLI 框架
 - [LLM 提供商](https://openai.com/) - AI 驱动的翻译
 
 ---
 
-## 📞 支持
+## 支持
 
-- 🐛 发现 bug？[提交 Issue](https://github.com/Olcmyk/Meowth-GBA-Translator/issues)
-- 💬 有问题？[开启讨论](https://github.com/Olcmyk/Meowth-GBA-Translator/discussions)
-- 🌟 喜欢这个项目？[在 GitHub 上给我们一个 Star](https://github.com/Olcmyk/Meowth-GBA-Translator)
+- 发现 bug？[提交 Issue](https://github.com/Olcmyk/Meowth-GBA-Translator/issues)
+- 有问题？[开启讨论](https://github.com/Olcmyk/Meowth-GBA-Translator/discussions)
+- 喜欢这个项目？[在 GitHub 上给我们一个 Star](https://github.com/Olcmyk/Meowth-GBA-Translator)
+
+---
+
+## 贡献
+
+欢迎贡献！你可以帮助的领域：
+
+- 添加更多语言支持
+- 添加将反编译改版汉化的功能
+- 改进 GUI/UX
+- 编写文档
 
 ---
 
