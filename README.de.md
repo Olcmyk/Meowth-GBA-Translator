@@ -83,7 +83,7 @@ meowth full pokemon.gba --provider deepseek
 
 ### GUI Verwenden (Am Einfachsten)
 
-![GUI-Screenshot](images/gui-screenshot.png)
+![GUI-Screenshot](https://raw.githubusercontent.com/Olcmyk/Meowth-GBA-Translator/main/images/gui-screenshot.png)
 
 1. Laden Sie **Meowth Translator** herunter und starten Sie es
 2. Klicken Sie auf "ROM auswählen" und wählen Sie Ihre GBA Pokémon ROM
@@ -95,7 +95,7 @@ meowth full pokemon.gba --provider deepseek
 5. Warten Sie auf den Abschluss (normalerweise 5-30 Minuten je nach ROM-Größe)
 6. Laden Sie die übersetzte ROM aus dem Ausgabeordner herunter
 
-![Übersetzungsvergleich](images/translation-comparison.jpg)
+![Übersetzungsvergleich](https://raw.githubusercontent.com/Olcmyk/Meowth-GBA-Translator/main/images/translation-comparison.jpg)
 *Links: Originalspiel | Rechts: Übersetztes Spiel*
 
 ### CLI Verwenden

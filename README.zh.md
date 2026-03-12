@@ -83,7 +83,7 @@ meowth full pokemon.gba --provider deepseek
 
 ### 使用 GUI（最简单）
 
-![GUI 截图](images/gui-screenshot.png)
+![GUI 截图](https://raw.githubusercontent.com/Olcmyk/Meowth-GBA-Translator/main/images/gui-screenshot.png)
 
 1. 下载并运行 **Meowth 翻译工具**
 2. 点击"选择 ROM"，选择你的 GBA 宝可梦 ROM
@@ -95,7 +95,7 @@ meowth full pokemon.gba --provider deepseek
 5. 等待完成（通常 5-30 分钟，取决于 ROM 大小）
 6. 从输出文件夹下载翻译后的 ROM
 
-![翻译对比](images/translation-comparison.jpg)
+![翻译对比](https://raw.githubusercontent.com/Olcmyk/Meowth-GBA-Translator/main/images/translation-comparison.jpg)
 *左：原版游戏 | 右：翻译后游戏*
 
 ### 使用 CLI
