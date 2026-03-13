@@ -18,7 +18,7 @@ def get_meowth_version() -> str:
         import importlib.metadata
         return importlib.metadata.version("meowth")
     except Exception:
-        return "0.3.2"
+        return "0.3.3"
 
 
 def get_platform_name() -> str:
