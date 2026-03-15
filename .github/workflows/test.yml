@@ -22,10 +22,10 @@ jobs:
 
       - name: Initialize submodules
         run: |
-          git submodule update --init HexManiacAdvance
-          git submodule update --init Pokemon_GBA_Font_Patch
-          git submodule update --init armips
-          git submodule update --init pokeapi
+          git submodule update --init --force HexManiacAdvance
+          git submodule update --init --force Pokemon_GBA_Font_Patch
+          git submodule update --init --force armips
+          git submodule update --init --force pokeapi
 
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
