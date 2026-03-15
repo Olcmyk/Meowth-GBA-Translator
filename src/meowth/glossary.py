@@ -57,6 +57,7 @@ class Glossary:
             compact = source.upper().replace(" ", "").replace("-", "")
             self._compact_index[compact] = target
 
+
     def _load_all(self, base_dir: Path):
         for category, (filename, id_col) in TERM_FILES.items():
             path = base_dir / filename

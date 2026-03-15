@@ -1,5 +1,6 @@
 """Apply Pokemon_GBA_Font_Patch via armips."""
 
+import platform
 import shutil
 import subprocess
 from pathlib import Path
@@ -7,7 +8,15 @@ from pathlib import Path
 from .resource_path import get_resource_path
 
 _PATCH_ROOT = get_resource_path("Pokemon_GBA_Font_Patch")
-DEFAULT_ARMIPS = get_resource_path("tools/armips")
+
+# Select armips executable based on platform
+_system = platform.system()
+if _system == "Windows":
+    DEFAULT_ARMIPS = get_resource_path("tools/armips.exe")
+elif _system == "Darwin":
+    DEFAULT_ARMIPS = get_resource_path("tools/armips")
+else:  # Linux
+    DEFAULT_ARMIPS = get_resource_path("tools/armips")
 
 # Per-game configuration for the font patch
 _GAME_CONFIG: dict[str, dict] = {
