@@ -1,7 +1,10 @@
+# DISABLED: Using local build and manual upload instead
+# To re-enable, remove the "on: []" line below and restore the original triggers
 name: Build MeowthBridge
 
-on:
-  workflow_call:
+on: []
+# Original triggers (disabled):
+#  workflow_call:
     outputs:
       artifact-name:
         description: "Name of the artifacts containing binaries"

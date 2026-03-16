@@ -1,9 +1,12 @@
+# DISABLED: Using local build and manual upload instead
+# To re-enable, remove the "on: []" line below and restore the original triggers
 name: Build GUI App
 
-on:
-  release:
-    types: [published]
-  workflow_dispatch:
+on: []
+# Original triggers (disabled):
+#  release:
+#    types: [published]
+#  workflow_dispatch:
 
 jobs:
   build-binaries:
