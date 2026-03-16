@@ -20,6 +20,24 @@ TERM_FILES = {
     "regions": ("region_names.csv", "region_id"),
 }
 
+# Categories that should be included in LLM context (proper nouns only)
+# These are terms that won't appear in everyday dialogue
+CONTEXT_SAFE_CATEGORIES = {
+    "pokemon",      # Pokemon names (BULBASAUR, PIKACHU)
+    "locations",    # Location names (PALLET TOWN, VIRIDIAN CITY)
+    "regions",      # Region names (KANTO, JOHTO)
+}
+
+# Categories excluded from context to avoid false matches
+# These contain common words that might appear in dialogue
+CONTEXT_UNSAFE_CATEGORIES = {
+    "moves",        # Move names (bite, tackle, surf - common words!)
+    "abilities",    # Ability names (overgrow, blaze)
+    "items",        # Item names (potion, ball)
+    "types",        # Type names (fire, water - very common!)
+    "natures",      # Nature names (brave, timid - common adjectives!)
+}
+
 
 class Glossary:
     def __init__(
@@ -34,11 +52,13 @@ class Glossary:
         self.target_id = SUPPORTED_LANGUAGES[target_lang]["pokeapi_id"]
 
         self.source_to_target: dict[str, str] = {}
-        # Separate index for context matching: uppercase key → (original_source, target)
-        self._upper_index: dict[str, tuple[str, str]] = {}
+        # Separate index for context matching: uppercase key → (original_source, target, category)
+        self._upper_index: dict[str, tuple[str, str, str]] = {}
         # Compact key index: uppercase with spaces/hyphens stripped
         # Handles GBA's 13-char move names like THUNDERPUNCH → Thunder Punch
         self._compact_index: dict[str, str] = {}
+        # Category mapping: term → category
+        self._term_category: dict[str, str] = {}
 
         # Try loading from pre-built JSON first, fall back to CSV
         json_path = Path(__file__).parent.parent.parent / "resources" / f"glossary_{source_lang}_{target_lang}.json"
@@ -52,9 +72,13 @@ class Glossary:
         import json
         data = json.loads(path.read_text(encoding="utf-8"))
         self.source_to_target = data.get("source_to_target", {})
+        term_categories = data.get("term_categories", {})
+
         # Build uppercase index and compact index
         for source, target in self.source_to_target.items():
-            self._upper_index[source.upper()] = (source, target)
+            category = term_categories.get(source, "unknown")
+            self._upper_index[source.upper()] = (source, target, category)
+            self._term_category[source] = category
             compact = source.upper().replace(" ", "").replace("-", "")
             self._compact_index[compact] = target
 
@@ -64,9 +88,9 @@ class Glossary:
             path = base_dir / filename
             if not path.exists():
                 continue
-            self._load_csv(path, id_col)
+            self._load_csv(path, id_col, category)
 
-    def _load_csv(self, path: Path, id_col: str):
+    def _load_csv(self, path: Path, id_col: str, category: str):
         """Load a PokeAPI names CSV and build source->target mapping."""
         # Group by entity ID
         by_id: dict[int, dict[int, str]] = {}
@@ -87,7 +111,8 @@ class Glossary:
             if source_name and target_name:
                 self.source_to_target[source_name] = target_name
                 self.source_to_target[source_name.upper()] = target_name
-                self._upper_index[source_name.upper()] = (source_name, target_name)
+                self._upper_index[source_name.upper()] = (source_name, target_name, category)
+                self._term_category[source_name] = category
                 compact = source_name.upper().replace(" ", "").replace("-", "")
                 self._compact_index[compact] = target_name
 
@@ -119,12 +144,18 @@ class Glossary:
     def get_context_terms(self, text: str, limit: int = 20) -> dict[str, str]:
         """Find terms in text that have known translations (for LLM context).
 
+        Only includes proper nouns (Pokemon names, locations, regions) to avoid
+        false matches with common words like "bite" (move name) or "fire" (type).
+
         Uses the uppercase index for efficient case-insensitive matching.
         Only checks each unique term once against the text.
         """
         found: dict[str, str] = {}
         text_upper = text.upper()
-        for upper_key, (source, target) in self._upper_index.items():
+        for upper_key, (source, target, category) in self._upper_index.items():
+            # Only include safe categories (proper nouns)
+            if category not in CONTEXT_SAFE_CATEGORIES:
+                continue
             if upper_key in text_upper:
                 found[source] = target
                 if len(found) >= limit:
