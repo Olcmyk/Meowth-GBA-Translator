@@ -4,8 +4,9 @@ import csv
 from pathlib import Path
 
 from .languages import SUPPORTED_LANGUAGES
+from .resource_path import get_resource_path
 
-POKEAPI_DIR = Path(__file__).parent.parent.parent / "pokeapi" / "data" / "v2" / "csv"
+POKEAPI_DIR = get_resource_path("pokeapi/data/v2/csv")
 
 # CSV files and their name column
 TERM_FILES = {
