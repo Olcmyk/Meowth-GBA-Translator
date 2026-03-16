@@ -6,7 +6,6 @@ from pathlib import Path
 from .languages import SUPPORTED_LANGUAGES
 
 POKEAPI_DIR = Path(__file__).parent.parent.parent / "pokeapi" / "data" / "v2" / "csv"
-POKEAPI_ZH_PATCHES_DIR = Path(__file__).parent.parent.parent / "pokeapi_zh_patches" / "data" / "v2" / "csv"
 
 # CSV files and their name column
 TERM_FILES = {
@@ -61,14 +60,6 @@ class Glossary:
 
     def _load_all(self, base_dir: Path):
         for category, (filename, id_col) in TERM_FILES.items():
-            # Try zh patches first for Chinese translations
-            if self.target_lang == "zh-Hans" and POKEAPI_ZH_PATCHES_DIR.exists():
-                patch_path = POKEAPI_ZH_PATCHES_DIR / filename
-                if patch_path.exists():
-                    self._load_csv(patch_path, id_col)
-                    continue
-
-            # Fall back to official pokeapi
             path = base_dir / filename
             if not path.exists():
                 continue
