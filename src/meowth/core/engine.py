@@ -74,6 +74,12 @@ _TRAINER_CLASS_OVERRIDES: dict[str, str] = {
     "RIVAL": "劲敌",
 }
 
+# Menu item translations (shortened to fit byte limits)
+# Note: With automatic pointer detection, most items can now use full translations
+_MENU_ITEM_OVERRIDES: dict[str, str] = {
+    # Reserved for future manual overrides if needed
+}
+
 
 def detect_game(rom_path: Path) -> str:
     """Detect game type from GBA ROM header (bytes 0xAC-0xAF)."""

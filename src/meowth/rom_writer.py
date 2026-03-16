@@ -237,6 +237,23 @@ class RomWriter:
 
         stats["written"] += 1
 
+    def _search_pointers(self, rom: bytearray, target_address: int) -> list[str]:
+        """Search ROM for pointers to the given address.
+
+        Returns list of pointer source addresses in hex format (e.g., "0x00120674").
+        Only searches in safe data section (>= MIN_POINTER_SOURCE).
+        """
+        pointer_value = (self.POINTER_OFFSET + target_address).to_bytes(4, "little")
+        found = []
+
+        # Search from MIN_POINTER_SOURCE to FONT_BOUNDARY
+        search_end = min(self.FONT_BOUNDARY, len(rom) - 4)
+        for addr in range(self.MIN_POINTER_SOURCE, search_end, 4):  # Align to 4 bytes
+            if rom[addr:addr+4] == pointer_value:
+                found.append(f"0x{addr:08X}")
+
+        return found
+
     def _write_relocated(
         self, rom: bytearray, encoded: bytes, pointer_sources: list
     ) -> None:
@@ -421,8 +438,16 @@ class RomWriter:
                 self._write_in_place_v2(rom, address, encoded, original_length)
                 stats["in_place"] += 1
             else:
-                truncated = self._truncate_encoded(encoded, actual_text_len)
-                self._write_in_place_v2(rom, address, truncated, original_length)
-                stats["in_place"] += 1
+                # Text is too long - search for pointers to enable relocation
+                found_pointers = self._search_pointers(rom, address)
+                if found_pointers:
+                    # Found pointers - use relocation instead of truncation
+                    self._write_relocated(rom, encoded, found_pointers)
+                    stats["relocated"] += 1
+                else:
+                    # No pointers found - truncate as last resort
+                    truncated = self._truncate_encoded(encoded, actual_text_len)
+                    self._write_in_place_v2(rom, address, truncated, original_length)
+                    stats["in_place"] += 1
         else:
             stats["skipped"] += 1
