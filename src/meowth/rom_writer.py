@@ -16,6 +16,8 @@ class RomWriter:
         "firered": 0x01FD3000,
         "leafgreen": 0x01FD3000,
         "emerald": 0x01FD0000,  # HackFunctionAddresses 0x09FD0000 - 0x08000000
+        "ruby": 0x01FD0000,
+        "sapphire": 0x01FD0000,
     }
 
     # Default for backwards compatibility

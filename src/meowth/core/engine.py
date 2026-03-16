@@ -89,6 +89,69 @@ def detect_game(rom_path: Path) -> str:
     return _GAME_CODES.get(code, "unknown")
 
 
+def is_decomp_rom(rom_path: Path) -> bool:
+    """Detect if ROM is a decomp (source-built) ROM rather than a binary hack.
+
+    Decomp ROMs typically have:
+    1. Different internal structure (no traditional free space patterns)
+    2. Modified build info strings
+    3. Different code organization
+
+    This checks for common decomp indicators:
+    - Presence of specific build strings (e.g., "pokeemerald", "pokefirered")
+    - Unusual ROM size (decomp ROMs often have non-standard sizes)
+    - Modified game title in header
+    """
+    with open(rom_path, "rb") as f:
+        # Read game title (0xA0-0xAB)
+        f.seek(0xA0)
+        title = f.read(12).decode("ascii", errors="replace")
+
+        # Read game code (0xAC-0xAF)
+        game_code = f.read(4).decode("ascii", errors="replace")
+
+        # Get ROM size
+        f.seek(0, 2)  # Seek to end
+        rom_size = f.tell()
+
+        # Read a sample of ROM data to check for decomp strings
+        f.seek(0)
+        rom_data = f.read(min(rom_size, 2 * 1024 * 1024))  # Read first 2MB
+
+    # Check for decomp indicators
+    decomp_indicators = [
+        b"pokeemerald",
+        b"pokefirered",
+        b"pokeleafgreen",
+        b"pokeruby",
+        b"pokesapphire",
+        b"pret/",  # pret organization marker
+        b"expansion",  # pokeemerald-expansion
+    ]
+
+    # Check if any decomp strings are present
+    for indicator in decomp_indicators:
+        if indicator in rom_data:
+            return True
+
+    # Check for non-standard ROM sizes (decomp ROMs often aren't exact power of 2)
+    # Standard GBA ROM sizes: 8MB, 16MB, 32MB
+    standard_sizes = {8 * 1024 * 1024, 16 * 1024 * 1024, 32 * 1024 * 1024}
+    if rom_size not in standard_sizes:
+        # Check if it's close to a standard size (within 1MB)
+        is_close_to_standard = any(abs(rom_size - size) < 1024 * 1024 for size in standard_sizes)
+        if not is_close_to_standard:
+            return True
+
+    # Check for modified game title (decomp ROMs often have custom titles)
+    # Standard titles start with "POKEMON"
+    if game_code in _GAME_CODES and not title.upper().startswith("POKEMON"):
+        return True
+
+    return False
+
+
+
 def convert_format(data: dict) -> dict:
     """Convert MeowthBridge entries format to tables + free_texts format."""
     if "tables" in data:
@@ -316,6 +379,21 @@ class TranslationEngine:
             self.config.game = detected
             self._log("info", Messages.DETECTED_GAME.format(game=self.config.game))
 
+        # Check for decomp ROM when translating to CJK languages (requires font injection)
+        if is_cjk_language(self.config.target_lang):
+            if is_decomp_rom(original_rom):
+                error_msg = (
+                    f"错误：检测到这是一个 decomp ROM（源码编译版本），而非 binary ROM。\n"
+                    f"Decomp ROM 无法使用字库注入功能，因此无法翻译成中文。\n\n"
+                    f"如果您想翻译 decomp ROM，请：\n"
+                    f"1. 直接修改源代码中的文本\n"
+                    f"2. 在源码中添加中文字库支持\n"
+                    f"3. 重新编译 ROM\n\n"
+                    f"本工具仅支持 binary ROM（原版或基于原版的二进制改版）。"
+                )
+                self._log("error", error_msg)
+                raise RuntimeError(error_msg)
+
         data = json.loads(translations_path.read_text(encoding="utf-8"))
         data = convert_format(data)
 
@@ -463,6 +541,21 @@ class TranslationEngine:
             self._log("info", Messages.DETECTED_GAME.format(game=self.config.game))
         else:
             self._log("warning", Messages.GAME_DETECTION_FAILED.format(game=self.config.game))
+
+        # Check for decomp ROM when translating to CJK languages (requires font injection)
+        if is_cjk_language(self.config.target_lang):
+            if is_decomp_rom(rom_path):
+                error_msg = (
+                    f"错误：检测到这是一个 decomp ROM（源码编译版本），而非 binary ROM。\n"
+                    f"Decomp ROM 无法使用字库注入功能，因此无法翻译成中文。\n\n"
+                    f"如果您想翻译 decomp ROM，请：\n"
+                    f"1. 直接修改源代码中的文本\n"
+                    f"2. 在源码中添加中文字库支持\n"
+                    f"3. 重新编译 ROM\n\n"
+                    f"本工具仅支持 binary ROM（原版或基于原版的二进制改版）。"
+                )
+                self._log("error", error_msg)
+                raise RuntimeError(error_msg)
 
         # Generate output filename
         original_name = rom_path.stem

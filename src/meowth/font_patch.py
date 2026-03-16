@@ -41,6 +41,20 @@ _GAME_CONFIG: dict[str, dict] = {
         "output": "baserom_E_chs.gba",
         "use_strequ": True,
     },
+    "ruby": {
+        "subdir": "pokeRS",
+        "asm": "main_R.asm",
+        "baserom": "baserom_R.gba",
+        "output": "chsfontrom_R.gba",
+        "use_strequ": False,
+    },
+    "sapphire": {
+        "subdir": "pokeRS",
+        "asm": "main_S.asm",
+        "baserom": "baserom_S.gba",
+        "output": "chsfontrom_S.gba",
+        "use_strequ": False,
+    },
 }
 
 

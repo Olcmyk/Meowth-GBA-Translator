@@ -13,6 +13,7 @@ from .core.engine import (
     TABLE_CATEGORIES,
     convert_format,
     detect_game,
+    is_decomp_rom,
     _HARDCODED_TRANSLATIONS,
     _TRAINER_CLASS_OVERRIDES,
 )
