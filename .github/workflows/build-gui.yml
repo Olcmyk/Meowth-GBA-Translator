@@ -63,6 +63,12 @@ jobs:
           cp armips ../../tools/armips
           chmod +x ../../tools/armips
 
+      - name: Remove Windows armips to avoid conflicts
+        run: |
+          rm -f tools/armips.exe
+          echo "Removed Windows armips binary to ensure only macOS version is packaged"
+          ls -la tools/
+
       - name: Prepare glossary directory
         run: mkdir -p resources
 
@@ -188,6 +194,13 @@ jobs:
           cmake --build . --config Release
           mkdir -p ../../tools
           cp Release/armips.exe ../../tools/armips.exe
+
+      - name: Remove macOS armips to avoid conflicts
+        shell: bash
+        run: |
+          rm -f tools/armips
+          echo "Removed macOS armips binary to ensure only Windows version is packaged"
+          ls -la tools/
 
       - name: Prepare glossary directory
         shell: bash
