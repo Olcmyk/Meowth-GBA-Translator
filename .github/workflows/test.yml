@@ -19,13 +19,13 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
-      - name: Initialize submodules
+      - name: Reset submodules to clean state
         run: |
-          git submodule update --init --force HexManiacAdvance
-          git submodule update --init --force Pokemon_GBA_Font_Patch
-          git submodule update --init --force armips
-          git submodule update --init --force pokeapi
+          git submodule foreach --recursive git reset --hard
+          git submodule foreach --recursive git clean -fdx
 
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
