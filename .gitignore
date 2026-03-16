@@ -114,3 +114,8 @@ cmake_install.cmake
 # Temporary build artifacts
 armips/build/
 resources_temp/
+resources/
+
+# Translation cache
+work/cache/
+work/*.json
