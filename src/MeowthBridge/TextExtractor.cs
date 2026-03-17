@@ -38,6 +38,17 @@ public class TextExtractor
         ExtractLoadpointerTexts(entries, extractedAddresses, ref id, loadpointerMap);
         Console.Error.WriteLine($"  loadpointer 文本: {entries.Count - beforeLp} 条");
 
+        // Phase 4: 扫描所有指针（包括 ARM 代码中的引用）
+        Console.Error.WriteLine("Phase 4: 扫描所有指针...");
+        var allPointerMap = ScanAllPointers();
+        Console.Error.WriteLine($"  发现 {allPointerMap.Count} 个文本地址的指针引用");
+
+        // Phase 5: 提取所有指针引用的文本
+        Console.Error.WriteLine("Phase 5: 提取指针文本...");
+        int beforePtr = entries.Count;
+        ExtractAllPointerTexts(entries, extractedAddresses, ref id, allPointerMap);
+        Console.Error.WriteLine($"  指针文本: {entries.Count - beforePtr} 条");
+
         return entries;
     }
 
@@ -215,6 +226,96 @@ public class TextExtractor
     }
 
     /// <summary>
+    /// Phase 4: 扫描所有 4 字节对齐的指针，构建文本地址映射
+    /// 这会找到 ARM 代码中的文本引用（如数据池中的指针）
+    /// </summary>
+    private Dictionary<int, HashSet<int>> ScanAllPointers()
+    {
+        var map = new Dictionary<int, HashSet<int>>();
+        
+        // 扫描所有 4 字节对齐的位置
+        for (int i = 0; i < _model.Count - 3; i += 4)
+        {
+            // 指针必须以 0x08 或 0x09 结尾（GBA 地址空间）
+            if (_model[i + 3] != 0x08 && _model[i + 3] != 0x09) continue;
+            
+            var pointer = _model.ReadPointer(i);
+            
+            // 指针必须指向 ROM 内
+            if (pointer < 0 || pointer >= _model.Count) continue;
+            
+            // 跳过指向头部的指针
+            if (pointer < 0x0A0000) continue;
+            
+            // 使用严格验证（Phase 5 专用）
+            var textLength = ValidatePcsTextStrict(pointer);
+            if (textLength < 2) continue;
+            
+            if (!map.ContainsKey(pointer))
+                map[pointer] = new HashSet<int>();
+            map[pointer].Add(i);
+        }
+        
+        return map;
+    }
+
+    /// <summary>
+    /// Phase 5: 提取所有指针引用的文本
+    /// </summary>
+    private void ExtractAllPointerTexts(
+        List<TextEntry> entries, HashSet<int> extractedAddresses, ref int id,
+        Dictionary<int, HashSet<int>> allPointerMap)
+    {
+        int found = 0;
+        int rejected = 0;
+
+        foreach (var (textAddr, ptrSources) in allPointerMap)
+        {
+            if (extractedAddresses.Contains(textAddr)) continue;
+
+            // 第一关：严格的字节级验证
+            var textLength = ValidatePcsTextStrict(textAddr);
+            if (textLength < 2)
+            {
+                rejected++;
+                continue;
+            }
+
+            // 第二关：转换文本
+            var text = _model.TextConverter.Convert(_model, textAddr, textLength);
+            if (string.IsNullOrEmpty(text) || text == "\"\"")
+            {
+                rejected++;
+                continue;
+            }
+
+            // 第三关：高质量文本检查（超严格）
+            if (!IsHighQualityText(text))
+            {
+                rejected++;
+                continue;
+            }
+
+            // 通过所有检查，提取文本
+            extractedAddresses.Add(textAddr);
+
+            entries.Add(new TextEntry
+            {
+                Id = $"ptr_{id++:D5}",
+                Category = "pointers",
+                Address = $"0x{textAddr:X}",
+                PointerSources = ptrSources.Select(p => $"0x{p:X}").ToList(),
+                Original = text,
+                ByteLength = textLength,
+                IsPointerBased = true
+            });
+            found++;
+        }
+
+        Console.Error.WriteLine($"  (拒绝了 {rejected} 条低质量文本)");
+    }
+
+    /// <summary>
     /// 验证地址处是否为有效 PCS 文本，返回长度（含 0xFF 终止符），无效返回 0
     /// 覆盖完整 Gen3 PCS 字符集：
     ///   0x00=空格, 0x01-0x50=扩展字符, 0x51-0xA0=扩展字符,
@@ -289,6 +390,290 @@ public class TextExtractor
         }
 
         return 0; // 没找到终止符
+    }
+
+    /// <summary>
+    /// 严格验证 PCS 文本（用于 Phase 5 全指针扫描）
+    /// 比 ValidatePcsText 更保守，减少误判
+    /// </summary>
+    /// <summary>
+    /// 超严格验证 PCS 文本（Phase 5 专用）
+    /// 目标：100% 准确率，宁可漏掉也不能错
+    /// </summary>
+    private int ValidatePcsTextStrict(int address)
+    {
+        if (address < 0 || address >= _model.Count) return 0;
+
+        const int MAX_LENGTH = 2000;
+        int letters = 0;
+        int totalPrintable = 0;
+        int spaces = 0;
+        int words = 0;
+        int sentences = 0;
+        bool inWord = false;
+        bool hasUpperCase = false;
+        bool hasLowerCase = false;
+
+        for (int i = 0; i < MAX_LENGTH && address + i < _model.Count; i++)
+        {
+            byte b = _model[address + i];
+
+            if (b == 0xFF) // 终止符
+            {
+                // 超严格要求：
+                
+                // 1. 最少 15 个字母（排除所有短标签和片段）
+                if (letters < 15) return 0;
+                
+                // 2. 至少 3 个单词（确保是完整句子或短语）
+                if (words < 3) return 0;
+                
+                // 3. 至少 2 个空格（确保有单词分隔）
+                if (spaces < 2) return 0;
+                
+                // 4. 字母比例至少 40%（严格过滤二进制数据）
+                if (totalPrintable > 0 && (double)letters / totalPrintable < 0.40) return 0;
+                
+                // 5. 总长度至少 20 字节（排除短文本）
+                if (i < 20) return 0;
+                
+                // 6. 必须同时有大写和小写字母（排除全大写标签如 "SOMEONE'S PC"）
+                if (!hasUpperCase || !hasLowerCase) return 0;
+                
+                // 7. 单词平均长度检查（排除乱码）
+                double avgWordLength = (double)letters / words;
+                if (avgWordLength < 2.0 || avgWordLength > 15.0) return 0;
+                
+                return i + 1;
+            }
+
+            // A-Z 大写字母
+            if (b >= 0xBB && b <= 0xD4)
+            {
+                letters++;
+                totalPrintable++;
+                hasUpperCase = true;
+                if (!inWord)
+                {
+                    words++;
+                    inWord = true;
+                }
+                continue;
+            }
+
+            // a-z 小写字母
+            if (b >= 0xD5 && b <= 0xEE)
+            {
+                letters++;
+                totalPrintable++;
+                hasLowerCase = true;
+                if (!inWord)
+                {
+                    words++;
+                    inWord = true;
+                }
+                continue;
+            }
+
+            // é 特殊字母
+            if (b == 0x1B)
+            {
+                letters++;
+                totalPrintable++;
+                if (!inWord)
+                {
+                    words++;
+                    inWord = true;
+                }
+                continue;
+            }
+
+            // 空格 — 单词分隔符
+            if (b == 0x00)
+            {
+                spaces++;
+                totalPrintable++;
+                inWord = false;
+                continue;
+            }
+
+            // 句号、问号、感叹号（句子结束标记）
+            if (b == 0xAD || b == 0xAC || b == 0xAB)
+            {
+                sentences++;
+                totalPrintable++;
+                inWord = false;
+                continue;
+            }
+
+            // 其他标点和数字
+            if (b >= 0xA1 && b <= 0xBA)
+            {
+                totalPrintable++;
+                continue;
+            }
+
+            // 换行/换段控制码
+            if (b == 0xFA || b == 0xFB || b == 0xFE)
+            {
+                totalPrintable++;
+                inWord = false;
+                continue;
+            }
+
+            // 带参数的控制码
+            if (b == 0xFC && address + i + 1 < _model.Count)
+            {
+                i++;
+                continue;
+            }
+            if (b == 0xFD && address + i + 1 < _model.Count)
+            {
+                i++;
+                continue;
+            }
+
+            // 扩展字符（更保守：只接受常见范围）
+            if ((b >= 0x01 && b <= 0x50) || (b >= 0xEF && b <= 0xF9))
+            {
+                totalPrintable++;
+                continue;
+            }
+
+            // 不合法字节 — 直接拒绝
+            return 0;
+        }
+
+        return 0;
+    }
+
+    /// <summary>
+    /// 黑名单：已知的系统标签、模板字符串、内部标识符
+    /// 这些不应该被翻译
+    /// </summary>
+    private static readonly HashSet<string> TEXT_BLACKLIST = new()
+    {
+        // 系统标签
+        "SOMEONE'S PC",
+        "PLAYER'S PC",
+        "BILL'S PC",
+        
+        // 短标签
+        "PP",
+        "HP",
+        "Lv.",
+        "No.",
+        "HT",
+        "WT",
+        
+        // 单个单词（太短，可能是标签）
+        "RED",
+        "GREEN",
+        "BLUE",
+        "RUBY",
+        "SAPPHIRE",
+        "EMERALD",
+        "GOLD",
+        "SILVER",
+        
+        // 其他已知的内部字符串
+        "SMALL DESK",
+        "BIG DESK",
+    };
+
+    /// <summary>
+    /// 检查文本是否包含模板变量或特殊占位符
+    /// 这些通常是游戏内部使用的模板字符串
+    /// </summary>
+    private bool ContainsTemplateVariables(string text)
+    {
+        // 检查反斜杠占位符：\00, \05, \1F, \20 等
+        if (System.Text.RegularExpressions.Regex.IsMatch(text, @"\\[0-9A-F]{2}"))
+            return true;
+        
+        // 检查 [buffer] 占位符
+        if (text.Contains("[buffer"))
+            return true;
+        
+        // 检查连续的控制字符
+        int controlCharCount = 0;
+        foreach (char c in text)
+        {
+            if (c == '\\' || c == '!' || c == '\x01' || c == '\x02')
+            {
+                controlCharCount++;
+                if (controlCharCount > 5) return true;
+            }
+            else
+            {
+                controlCharCount = 0;
+            }
+        }
+        
+        return false;
+    }
+
+    /// <summary>
+    /// 检查文本质量（超严格）
+    /// </summary>
+    private bool IsHighQualityText(string text)
+    {
+        if (string.IsNullOrEmpty(text)) return false;
+        
+        var cleanText = text.Trim('"').Trim();
+        
+        // 1. 检查黑名单
+        if (TEXT_BLACKLIST.Contains(cleanText)) return false;
+        
+        // 2. 检查是否包含模板变量
+        if (ContainsTemplateVariables(cleanText)) return false;
+        
+        // 3. 检查长度（至少 30 字符）
+        if (cleanText.Length < 30) return false;
+        
+        // 4. 检查是否有完整的句子结构
+        var sentences = System.Text.RegularExpressions.Regex.Matches(cleanText, @"[A-Z][^.!?\n]*[.!?]");
+        if (sentences.Count == 0) return false;
+        
+        // 5. 检查字母比例
+        int letters = 0;
+        int total = 0;
+        foreach (char c in cleanText)
+        {
+            if (char.IsLetter(c)) letters++;
+            if (c != '\n' && c != '\r') total++;
+        }
+        
+        if (total > 0 && (double)letters / total < 0.40) return false;
+        
+        // 6. 检查是否有常见的对话/描述词汇（提高置信度）
+        // 扩展常见词列表，包含更多英语常用词
+        var commonWords = new[] { 
+            "the", "a", "an", "and", "or", "but", "if", "for", "to", "of", "in", "on", "at", "by", "with",
+            "you", "your", "i", "my", "we", "our", "he", "she", "it", "they", "them", "their",
+            "is", "are", "was", "were", "be", "been", "being", "have", "has", "had", "do", "does", "did",
+            "will", "would", "can", "could", "should", "may", "might", "must",
+            "this", "that", "these", "those", "some", "any", "all", "no", "not",
+            "as", "from", "into", "about", "after", "before", "when", "where", "who", "what", "which", "how"
+        };
+        
+        var lowerText = cleanText.ToLower();
+        int commonWordCount = 0;
+        
+        foreach (var word in commonWords)
+        {
+            // 检查单词是否作为独立单词出现（前后有空格、标点或开头/结尾）
+            if (System.Text.RegularExpressions.Regex.IsMatch(lowerText, @"\b" + word + @"\b"))
+            {
+                commonWordCount++;
+                break; // 找到 1 个就够了
+            }
+        }
+        
+        // 至少包含 1 个常见词
+        if (commonWordCount < 1) return false;
+        
+        return true;
     }
 
     public string ToJson(List<TextEntry> entries)
