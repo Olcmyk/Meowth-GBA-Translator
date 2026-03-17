@@ -49,6 +49,12 @@ public class TextExtractor
         ExtractAllPointerTexts(entries, extractedAddresses, ref id, allPointerMap);
         Console.Error.WriteLine($"  指针文本: {entries.Count - beforePtr} 条");
 
+        // Phase 6: 顺序扫描整个 ROM，提取所有有效 PCS 文本（包括无指针引用的文本）
+        Console.Error.WriteLine("Phase 6: 顺序扫描所有文本...");
+        int beforeSeq = entries.Count;
+        ExtractSequentialTexts(entries, extractedAddresses, ref id);
+        Console.Error.WriteLine($"  顺序扫描文本: {entries.Count - beforeSeq} 条");
+
         return entries;
     }
 
@@ -312,6 +318,82 @@ public class TextExtractor
             found++;
         }
 
+        Console.Error.WriteLine($"  (拒绝了 {rejected} 条低质量文本)");
+    }
+
+    private void ExtractSequentialTexts(
+        List<TextEntry> entries, HashSet<int> extractedAddresses, ref int id)
+    {
+        int found = 0;
+        int rejected = 0;
+        
+        // 从 0x0A0000 开始扫描（跳过 ROM 头和系统区域）
+        const int START_ADDR = 0x0A0000;
+        
+        for (int addr = START_ADDR; addr < _model.Count - 20; addr++)
+        {
+            // 跳过已提取的地址
+            if (extractedAddresses.Contains(addr))
+            {
+                // 如果这个地址已经提取过，跳过整个文本
+                var skipLength = ValidatePcsTextStrict(addr);
+                if (skipLength > 0)
+                {
+                    addr += skipLength - 1;
+                }
+                continue;
+            }
+            
+            // 快速预检：必须以字母开头（大写或小写）
+            byte firstByte = _model[addr];
+            if (!((firstByte >= 0xBB && firstByte <= 0xD4) || (firstByte >= 0xD5 && firstByte <= 0xEE)))
+            {
+                continue;
+            }
+            
+            // 第一关：严格的字节级验证
+            var textLength = ValidatePcsTextStrict(addr);
+            if (textLength < 2)
+            {
+                continue;
+            }
+            
+            // 第二关：转换文本
+            var text = _model.TextConverter.Convert(_model, addr, textLength);
+            if (string.IsNullOrEmpty(text) || text == "\"\"")
+            {
+                rejected++;
+                addr += textLength - 1;
+                continue;
+            }
+            
+            // 第三关：高质量文本检查（超严格）
+            if (!IsHighQualityText(text))
+            {
+                rejected++;
+                addr += textLength - 1;
+                continue;
+            }
+            
+            // 通过所有检查，提取文本
+            extractedAddresses.Add(addr);
+            
+            entries.Add(new TextEntry
+            {
+                Id = $"seq_{id++:D5}",
+                Category = "sequential",
+                Address = $"0x{addr:X}",
+                PointerSources = new List<string>(),  // 无指针引用
+                Original = text,
+                ByteLength = textLength,
+                IsPointerBased = false
+            });
+            found++;
+            
+            // 跳过已处理的文本内容
+            addr += textLength - 1;
+        }
+        
         Console.Error.WriteLine($"  (拒绝了 {rejected} 条低质量文本)");
     }
 
@@ -628,11 +710,13 @@ public class TextExtractor
         // 2. 检查是否包含模板变量
         if (ContainsTemplateVariables(cleanText)) return false;
         
-        // 3. 检查长度（至少 30 字符）
-        if (cleanText.Length < 30) return false;
+        // 3. 检查长度（至少 20 字符，降低要求以捕获更多短对话）
+        if (cleanText.Length < 20) return false;
         
         // 4. 检查是否有完整的句子结构
-        var sentences = System.Text.RegularExpressions.Regex.Matches(cleanText, @"[A-Z][^.!?\n]*[.!?]");
+        // 移除控制码后再检查句子结构
+        var textForSentenceCheck = System.Text.RegularExpressions.Regex.Replace(cleanText, @"\\[a-z]", " ");
+        var sentences = System.Text.RegularExpressions.Regex.Matches(textForSentenceCheck, @"[A-Z][^.!?\n]*[.!?]");
         if (sentences.Count == 0) return false;
         
         // 5. 检查字母比例
@@ -641,7 +725,7 @@ public class TextExtractor
         foreach (char c in cleanText)
         {
             if (char.IsLetter(c)) letters++;
-            if (c != '\n' && c != '\r') total++;
+            if (c != '\n' && c != '\r' && c != '\\') total++;
         }
         
         if (total > 0 && (double)letters / total < 0.40) return false;
