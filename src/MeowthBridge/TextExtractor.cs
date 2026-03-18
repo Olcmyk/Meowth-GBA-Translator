@@ -701,23 +701,26 @@ public class TextExtractor
     private bool IsHighQualityText(string text)
     {
         if (string.IsNullOrEmpty(text)) return false;
-        
+
         var cleanText = text.Trim('"').Trim();
-        
+
         // 1. 检查黑名单
         if (TEXT_BLACKLIST.Contains(cleanText)) return false;
-        
-        // 2. 检查是否包含模板变量
-        if (ContainsTemplateVariables(cleanText)) return false;
-        
-        // 3. 检查长度（至少 20 字符，降低要求以捕获更多短对话）
-        if (cleanText.Length < 20) return false;
-        
-        // 4. 检查是否有完整的句子结构
-        // 移除控制码后再检查句子结构
+
+        // 2. 允许模板变量（[player]、\qo、\qc 等）- 注释掉严格检查
+        // if (ContainsTemplateVariables(cleanText)) return false;
+
+        // 3. 检查长度（至少 8 字符，允许短文本如 "This is what we call a POKéMON."）
+        if (cleanText.Length < 8) return false;
+
+        // 4. 检查是否有完整的句子结构或包含变量
+        // 移除控制码和变量后再检查句子结构
         var textForSentenceCheck = System.Text.RegularExpressions.Regex.Replace(cleanText, @"\\[a-z]", " ");
+        textForSentenceCheck = System.Text.RegularExpressions.Regex.Replace(textForSentenceCheck, @"\[.*?\]", " ");
+        textForSentenceCheck = System.Text.RegularExpressions.Regex.Replace(textForSentenceCheck, @"\\[0-9A-F]{2}", " ");
         var sentences = System.Text.RegularExpressions.Regex.Matches(textForSentenceCheck, @"[A-Z][^.!?\n]*[.!?]");
-        if (sentences.Count == 0) return false;
+        // 允许没有句号的文本，只要有足够的字母即可
+        if (sentences.Count == 0 && cleanText.Length < 15) return false;
         
         // 5. 检查字母比例
         int letters = 0;
