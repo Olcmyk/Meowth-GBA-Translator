@@ -168,9 +168,16 @@ class RomWriter:
             if len(encoded) <= actual_text_len:
                 self._write_in_place(rom, address, encoded, original_length, stats)
             else:
-                # Truncate to fit the original text slot
-                truncated = self._truncate_encoded(encoded, actual_text_len)
-                self._write_in_place(rom, address, truncated, original_length, stats)
+                # Translated text is longer than original slot
+                # Search for pointers to this address
+                found_pointers = self._search_pointers(rom, address)
+                if found_pointers:
+                    # Found pointers, redirect to expansion area
+                    self._write_with_redirect(rom, encoded, found_pointers, stats)
+                else:
+                    # No pointers found, truncate to fit
+                    truncated = self._truncate_encoded(encoded, actual_text_len)
+                    self._write_in_place(rom, address, truncated, original_length, stats)
         else:
             stats["skipped_same"] += 1
 
