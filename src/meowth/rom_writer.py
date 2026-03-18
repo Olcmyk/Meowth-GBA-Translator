@@ -30,11 +30,11 @@ class RomWriter:
     POINTER_OFFSET = 0x08000000
 
     # Minimum safe pointer source address.
-    # ARM code section ends around 0x0A0000 in FRLG/Emerald.  Pointer sources
+    # ARM code section ends around 0x020000 in FRLG/Emerald.  Pointer sources
     # inside the code section are literal-pool entries that look like
     # pointers but are actually ARM instructions — writing to them
     # corrupts the executable code and crashes the game.
-    MIN_POINTER_SOURCE = 0x0A0000
+    MIN_POINTER_SOURCE = 0x020000
 
     # Minimum contiguous free block required (bytes)
     _MIN_FREE_BLOCK = 512 * 1024  # 512 KB
