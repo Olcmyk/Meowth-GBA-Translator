@@ -196,74 +196,6 @@ def _postprocess_fd_macros(json_path: Path):
     json_path.write_text(text, encoding="utf-8")
 
 
-def _supplement_emerald_texts(json_path: Path, rom_path: Path) -> None:
-    """Add Emerald intro texts that MeowthBridge misses to the extracted JSON.
-
-    These texts have no GBA pointer references in the ROM and are referenced
-    by hardcoded ASM offsets, so neither loadpointer scanning nor pointer
-    scanning finds them.
-    """
-    import struct
-
-    # Only supplement Emerald ROMs
-    try:
-        with open(rom_path, "rb") as f:
-            f.seek(0xAC)
-            game_code = f.read(4).decode("ascii", errors="replace")
-    except Exception:
-        return
-    if not game_code.startswith("BPEE"):
-        return
-
-    from ..rom_parser.pcs_decoder import PcsDecoder
-
-    with open(rom_path, "rb") as f:
-        rom_data = f.read()
-    decoder = PcsDecoder(rom_data)
-
-    data = json.loads(json_path.read_text(encoding="utf-8"))
-    entries = data.get("entries", [])
-    existing_addrs = {e.get("address", "") for e in entries}
-
-    # Texts missed by all scanners: (address, category)
-    missing = [
-        (0x2C89FB, "scripts"),  # "This is what we call a POKéMON."
-        (0x1FA769, "scripts"),  # "I've heard so much about you from your father..."
-    ]
-
-    id_counter = len(entries)
-    added = 0
-    for text_addr, category in missing:
-        addr_str = f"0x{text_addr:X}"
-        if addr_str in existing_addrs:
-            continue
-        length = decoder.validate_pcs_text(text_addr)
-        if length < 2:
-            continue
-        text = decoder.decode_pcs_text(text_addr, length)
-        if not text or text == '""':
-            continue
-        entries.append({
-            "id": f"emld_{id_counter:05d}",
-            "category": category,
-            "address": addr_str,
-            "pointer_sources": [],
-            "original": text,
-            "byte_length": length,
-            "is_pointer_based": False,
-            "table_name": None,
-            "table_index": None,
-        })
-        id_counter += 1
-        added += 1
-
-    if added:
-        data["entries"] = entries
-        json_path.write_text(
-            json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
-
-
 class TranslationEngine:
     """Core translation engine with callback support.
 
@@ -589,7 +521,6 @@ class TranslationEngine:
             os.chdir(original_cwd)
 
         _postprocess_fd_macros(output_path)
-        _supplement_emerald_texts(output_path, rom_path)
         return output_path
 
     def run_full(

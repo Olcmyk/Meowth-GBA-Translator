@@ -30,57 +30,6 @@ _FIRERED_MISSING_PC_TEXTS = [
 ]
 
 
-# Emerald texts not reachable by loadpointer scanning (no GBA pointers in ROM)
-# These are referenced by hardcoded ASM offsets or other non-loadpointer opcodes.
-# Written in-place since no pointer sources exist for redirection.
-_EMERALD_MISSING_TEXTS: list[tuple[int, str]] = [
-    (0x2C89FB, "scripts"),  # "This is what we call a POKéMON." (intro)
-    (0x1FA769, "scripts"),  # "I've heard so much about you from your father..." (Birch intro)
-]
-
-
-def _extract_known_missing_emerald_texts(
-    rom: GbaRom,
-    extracted_addresses: set[int],
-    id_counter: int,
-) -> tuple[list[dict], int]:
-    """Supplement Emerald with intro texts that loadpointer scanning misses."""
-    if not rom.game_code.startswith("BPEE"):
-        return [], id_counter
-
-    decoder = PcsDecoder(rom.data)
-    entries: list[dict] = []
-
-    for text_addr, category in _EMERALD_MISSING_TEXTS:
-        if text_addr in extracted_addresses:
-            continue
-
-        text_length = decoder.validate_pcs_text(text_addr)
-        if text_length < 2:
-            continue
-
-        text = decoder.decode_pcs_text(text_addr, text_length)
-        if not text or text == '""':
-            continue
-
-        extracted_addresses.add(text_addr)
-        entry = {
-            "id": f"emld_{id_counter:05d}",
-            "category": category,
-            "address": f"0x{text_addr:X}",
-            "pointer_sources": [],
-            "original": text,
-            "byte_length": text_length,
-            "is_pointer_based": False,
-            "table_name": None,
-            "table_index": None,
-        }
-        entries.append(entry)
-        id_counter += 1
-
-    return entries, id_counter
-
-
 def _extract_known_missing_firered_pc_texts(
     rom: GbaRom,
     extracted_addresses: set[int],
@@ -178,14 +127,6 @@ def extract_texts(rom_path: Path, output_path: Path) -> Path:
     )
     all_entries.extend(missing_entries)
     print(f"  Supplemental texts: {len(missing_entries)} entries", flush=True)
-
-    # Phase 5: supplement known Emerald intro texts missed by all scanners
-    print("Phase 5: Supplementing known missed Emerald intro texts...", flush=True)
-    emerald_entries, id_counter = _extract_known_missing_emerald_texts(
-        rom, extracted_addresses, id_counter
-    )
-    all_entries.extend(emerald_entries)
-    print(f"  Emerald supplemental texts: {len(emerald_entries)} entries", flush=True)
 
     # Write output JSON
     output_data = {"entries": all_entries}
