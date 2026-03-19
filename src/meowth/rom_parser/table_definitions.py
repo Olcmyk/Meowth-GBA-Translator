@@ -209,13 +209,164 @@ FIRERED_BPRE0_TABLES = [
 ]
 
 
+# Emerald BPEE0 table definitions
+# Addresses derived from work/emerald_texts_en.json (MeowthBridge extraction)
+EMERALD_BPEE0_TABLES = [
+    # Pokemon data
+    TableDefinition(
+        name="data.pokemon.names",
+        category="pokemon_names",
+        address=0x3185C8,
+        count=412,
+        entry_size=11,
+        is_pointer_based=False,
+    ),
+    TableDefinition(
+        name="data.pokemon.type.names",
+        category="type_names",
+        address=0x31AE38,
+        count=18,
+        entry_size=7,
+        is_pointer_based=False,
+    ),
+    TableDefinition(
+        name="data.pokemon.moves.names",
+        category="move_names",
+        address=0x31977C,
+        count=355,
+        entry_size=13,
+        is_pointer_based=False,
+    ),
+    TableDefinition(
+        name="data.pokemon.moves.descriptions",
+        category="move_descriptions",
+        address=0x6181C1,
+        count=354,
+        entry_size=64,
+        is_pointer_based=False,
+        is_sequential=True,
+    ),
+    TableDefinition(
+        name="data.pokemon.natures.names",
+        category="nature_names",
+        address=0x61CAAC,
+        count=25,
+        entry_size=10,
+        is_pointer_based=False,
+        is_sequential=True,
+    ),
+
+    # Items
+    TableDefinition(
+        name="data.items.stats",
+        category="item_names",
+        address=0x5839A0,
+        count=375,
+        entry_size=44,
+        is_pointer_based=False,
+        is_sequential=False,
+        text_length=13,
+    ),
+
+    # Abilities
+    TableDefinition(
+        name="data.abilities.names",
+        category="ability_names",
+        address=0x31B6DB,
+        count=78,
+        entry_size=13,
+        is_pointer_based=False,
+    ),
+    TableDefinition(
+        name="data.abilities.descriptions",
+        category="ability_descriptions",
+        address=0x31AF98,
+        count=78,
+        entry_size=64,
+        is_pointer_based=False,
+        is_sequential=True,
+    ),
+
+    # Trainers
+    TableDefinition(
+        name="data.trainers.classes.names",
+        category="trainer_classes",
+        address=0x30FCD4,
+        count=66,
+        entry_size=13,
+        is_pointer_based=False,
+    ),
+
+    # Maps and locations
+    TableDefinition(
+        name="data.maps.names",
+        category="map_names",
+        address=0x5A0B10,
+        count=213,
+        entry_size=20,
+        is_pointer_based=False,
+        is_sequential=True,
+    ),
+
+    # Menu texts
+    TableDefinition(
+        name="data.text.menu.itemStorage",
+        category="menu_item_storage",
+        address=0x5EAB2D,
+        count=7,
+        entry_size=20,
+        is_pointer_based=False,
+        is_sequential=True,
+    ),
+    TableDefinition(
+        name="data.text.menu.pause",
+        category="menu_pause",
+        address=0x5EE6C3,
+        count=13,
+        entry_size=15,
+        is_pointer_based=False,
+        is_sequential=True,
+    ),
+    TableDefinition(
+        name="data.menus.text.pc",
+        category="menu_pc",
+        address=0x5EB7EF,
+        count=31,
+        entry_size=30,
+        is_pointer_based=False,
+        is_sequential=True,
+    ),
+    TableDefinition(
+        name="data.text.menu.pokemon.options",
+        category="menu_pokemon_options",
+        address=0x5E96B6,
+        count=19,
+        entry_size=15,
+        is_pointer_based=False,
+        is_sequential=True,
+    ),
+
+    # Trade messages
+    TableDefinition(
+        name="data.text.trade.messages",
+        category="trade_messages",
+        address=0x32DB49,
+        count=9,
+        entry_size=70,
+        is_pointer_based=False,
+        is_sequential=True,
+    ),
+]
+
+
 # Game code to table definitions mapping
 GAME_TABLES = {
     "BPRE0": FIRERED_BPRE0_TABLES,
     "BPRE1": FIRERED_BPRE0_TABLES,  # Same as BPRE0
     "BPGE0": FIRERED_BPRE0_TABLES,  # LeafGreen uses same addresses
     "BPGE1": FIRERED_BPRE0_TABLES,
-    # TODO: Add Emerald, Ruby, Sapphire table definitions
+    "BPEE0": EMERALD_BPEE0_TABLES,  # Emerald (TrashMan)
+    "BPEE1": EMERALD_BPEE0_TABLES,
 }
 
 
