@@ -196,6 +196,75 @@ def _postprocess_fd_macros(json_path: Path):
     json_path.write_text(text, encoding="utf-8")
 
 
+# Emerald secret base menu texts: HMA's itemStorage anchor points to a function table,
+# not the actual text strings. These 4 texts have real GBA pointers we can redirect.
+_EMERALD_SECRET_BASE_TEXTS: list[tuple[int, list[int], str]] = [
+    (0x5EAB2D, [0x5DFECC], "menu_item_storage"),           # TURN OFF
+    (0x5EAB36, [0x5DFEC4], "menu_item_storage"),           # DECORATION
+    (0x5EAB41, [0x5DFEB4], "menu_item_storage"),           # ITEM STORAGE
+    (0x5EAB4E, [0x16B668, 0x5DFEBC], "menu_item_storage"), # MAILBOX
+]
+
+
+def _supplement_emerald_menu_texts(json_path: Path, rom_path: Path) -> None:
+    """Add Emerald secret base menu texts that MeowthBridge misses.
+
+    HMA's data.text.menu.itemStorage anchor for Emerald points to a function
+    pointer table, not text. The actual TURN OFF/DECORATION/ITEM STORAGE/MAILBOX
+    strings live nearby and have real GBA pointers for redirection.
+    """
+    try:
+        with open(rom_path, "rb") as f:
+            f.seek(0xAC)
+            game_code = f.read(4).decode("ascii", errors="replace")
+    except Exception:
+        return
+    if not game_code.startswith("BPEE"):
+        return
+
+    from ..rom_parser.pcs_decoder import PcsDecoder
+
+    with open(rom_path, "rb") as f:
+        rom_data = f.read()
+    decoder = PcsDecoder(rom_data)
+
+    data = json.loads(json_path.read_text(encoding="utf-8"))
+    entries = data.get("entries", [])
+    existing_addrs = {e.get("address", "") for e in entries}
+
+    id_counter = len(entries)
+    added = 0
+    for text_addr, ptr_sources, category in _EMERALD_SECRET_BASE_TEXTS:
+        addr_str = f"0x{text_addr:X}"
+        if addr_str in existing_addrs:
+            continue
+        length = decoder.validate_pcs_text(text_addr)
+        if length < 2:
+            continue
+        text = decoder.decode_pcs_text(text_addr, length)
+        if not text or text == '""':
+            continue
+        entries.append({
+            "id": f"emld_{id_counter:05d}",
+            "category": category,
+            "address": addr_str,
+            "pointer_sources": [f"0x{p:X}" for p in ptr_sources],
+            "original": text,
+            "byte_length": length,
+            "is_pointer_based": True,
+            "table_name": None,
+            "table_index": None,
+        })
+        id_counter += 1
+        added += 1
+
+    if added:
+        data["entries"] = entries
+        json_path.write_text(
+            json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+
+
 class TranslationEngine:
     """Core translation engine with callback support.
 
@@ -521,6 +590,7 @@ class TranslationEngine:
             os.chdir(original_cwd)
 
         _postprocess_fd_macros(output_path)
+        _supplement_emerald_menu_texts(output_path, rom_path)
         return output_path
 
     def run_full(
