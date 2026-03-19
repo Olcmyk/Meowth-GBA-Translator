@@ -338,7 +338,7 @@ class TranslationEngine:
         def process_batch(idx_batch):
             idx, batch = idx_batch
             self._translate_free_batch(batch)
-            return idx
+            return idx, batch
 
         with ThreadPoolExecutor(max_workers=self.config.max_workers) as executor:
             futures = {
@@ -347,10 +347,13 @@ class TranslationEngine:
             }
             for future in as_completed(futures):
                 done_count += 1
-                idx = future.result()
+                idx, batch = future.result()
                 self._log("info", Messages.BATCH_COMPLETE.format(
                     current=done_count, total=total, batch_id=idx + 1
                 ))
+                sample = next((e for e in batch if e.get("translated")), None)
+                if sample:
+                    print(f"  e.g. {sample['original']!r} → {sample['translated']!r}")
                 self.callbacks.on_progress("translate", done_count, total,
                     f"Batch {idx + 1} completed")
 
@@ -430,7 +433,13 @@ class TranslationEngine:
         glossary_ctx = self._format_glossary(all_text)
 
         # Translate
-        results = self.translator.translate_batch(protected_list, glossary_ctx)
+        try:
+            results = self.translator.translate_batch(protected_list, glossary_ctx)
+        except Exception as e:
+            print(f"[Batch failed after retries: {e}, keeping originals]")
+            for entry in remaining:
+                entry["translated"] = entry["original"]
+            return
 
         # Restore and wrap
         for i, entry in enumerate(remaining):
