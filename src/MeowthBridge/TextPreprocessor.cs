@@ -22,7 +22,7 @@ public static class TextPreprocessor
         RegexOptions.Compiled);
 
     /// <summary>
-    /// 预处理：剥离引号、替换控制码为占位符、处理换行
+    /// 预处理：剥离引号、标准化复数、替换控制码为占位符、处理换行
     /// </summary>
     public static (string cleanText, Dictionary<string, string> codeMap) Preprocess(string text)
     {
@@ -33,7 +33,15 @@ public static class TextPreprocessor
         if (clean.StartsWith("\"") && clean.EndsWith("\""))
             clean = clean[1..^1];
 
-        // 2. 处理换行符：区分语义换行和排版换行
+        // 2. 标准化复数形式：POKEMON BALLS → POKEMON BALL{PLURAL_S}
+        //    这样 AI 翻译时看到的是单数形式，避免"精灵球S"的问题
+        var (normalized, pluralMap) = NormalizePlurals(clean);
+        clean = normalized;
+        // 把复数占位符加入 codeMap，后处理时统一还原
+        foreach (var (placeholder, suffix) in pluralMap)
+            codeMap[placeholder] = suffix;
+
+        // 3. 处理换行符：区分语义换行和排版换行
         // \n\n → {PARA}（段落分隔/翻页）
         clean = clean.Replace("\n\n", "{PARA}");
         // 对剩余的单个 \n，判断前一行是否"顶到头了"
@@ -41,7 +49,7 @@ public static class TextPreprocessor
         // 长行后的 \n = 排版换行，替换为空格
         clean = ClassifyNewlines(clean);
 
-        // 3. 提取并替换控制码
+        // 4. 提取并替换控制码
         int codeIndex = 0;
         clean = ControlCodeRegex.Replace(clean, match =>
         {
@@ -53,6 +61,57 @@ public static class TextPreprocessor
         });
 
         return (clean, codeMap);
+    }
+
+    /// <summary>
+    /// 标准化复数形式：将复数词尾（S/ES）标记为占位符
+    /// 例如：POKEMON BALLS → POKEMON BALL{PLURAL0}
+    /// 这样 AI 翻译时看到单数形式，避免"精灵球S"的问题
+    /// </summary>
+    private static (string normalized, Dictionary<string, string> pluralMap) NormalizePlurals(string text)
+    {
+        var pluralMap = new Dictionary<string, string>();
+        var result = text;
+        int pluralIndex = 0;
+
+        // 匹配单词+ES或S（大小写不敏感）
+        // 优先匹配 ES，然后匹配 S
+        var pluralRegex = new Regex(@"\b([A-Za-z]{2,})(ES|S)\b", RegexOptions.None);
+
+        result = pluralRegex.Replace(result, match =>
+        {
+            var baseWord = match.Groups[1].Value;
+            var suffix = match.Groups[2].Value;
+            var lowerBase = baseWord.ToLower();
+            var lowerSuffix = suffix.ToLower();
+
+            // 排除一些不是复数的常见词
+            // 1. 以 SS 结尾的词（如 CLASS, PASS, BOSS, GRASS）
+            if (lowerSuffix == "s" && lowerBase.EndsWith("ss"))
+                return match.Value;
+
+            // 2. 以 US 结尾的词（如 STATUS, BONUS）
+            if (lowerSuffix == "s" && lowerBase.EndsWith("us"))
+                return match.Value;
+
+            // 3. 一些特殊的非复数词
+            var nonPluralWords = new HashSet<string>
+            {
+                "yes", "this", "was", "has", "is", "as", "his", "its", "plus",
+                "less", "press", "guess", "miss", "kiss", "cross", "loss", "gas"
+            };
+            if (nonPluralWords.Contains(lowerBase + lowerSuffix))
+                return match.Value;
+
+            // 创建占位符
+            var placeholder = $"{{PLURAL{pluralIndex}}}";
+            pluralMap[placeholder] = suffix;
+            pluralIndex++;
+
+            return baseWord + placeholder;
+        });
+
+        return (result, pluralMap);
     }
 
     /// <summary>
@@ -95,16 +154,21 @@ public static class TextPreprocessor
 
     /// <summary>
     /// 后处理：还原控制码、还原段落分隔、自动换行、加回引号
+    /// 注意：复数占位符（{PLURAL0} 等）会被删除，因为中文不需要复数标记
     /// </summary>
     public static string Postprocess(string translated, Dictionary<string, string> codeMap)
     {
         // 0. 清除 LLM 可能自行插入的换行（语义换行是 {SEMNL}/{PARA}，其余都是 LLM 产物）
         var result = translated.Replace("\n", "");
 
-        // 1. 还原控制码
+        // 1. 还原控制码，但跳过复数占位符（中文不需要复数标记）
         foreach (var (placeholder, original) in codeMap)
         {
-            result = result.Replace(placeholder, original);
+            // 复数占位符直接删除，不还原为 S/ES
+            if (placeholder.StartsWith("{PLURAL"))
+                result = result.Replace(placeholder, "");
+            else
+                result = result.Replace(placeholder, original);
         }
 
         // 2. 还原段落分隔和语义换行

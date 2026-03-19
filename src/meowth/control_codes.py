@@ -15,6 +15,7 @@ _INVISIBLE_RE = re.compile(
     r"|\\CC[0-9A-Fa-f]{4}"
     r"|\\B[0-9A-Fa-f]"
     r"|\\\?[0-9A-Fa-f]{2}"
+    r"|\\\\[0-9A-Fa-f]{2}"
     r"|\\[.plnr]"
     r"|\[[a-zA-Z_]\w*\]"
 )
@@ -33,6 +34,8 @@ def _classify_newlines(text: str) -> str:
     - \\n\\n → paragraph break (page break in GBA, keep as \\n\\n)
     - \\n where the preceding line is short (< 75% of GBA line width)
       → semantic newline (same text box, keep as \\n)
+    - \\n after sentence-ending punctuation
+      → semantic newline (preserve sentence boundary)
     - \\n where the preceding line is long (filled the text box)
       → layout wrap (replace with space)
     """
@@ -47,7 +50,10 @@ def _classify_newlines(text: str) -> str:
             # Strip PARA markers before measuring visible length
             clean_line = line.replace(_PARA, "")
             vis_len = _visible_length(clean_line)
-            if vis_len < _SEMANTIC_THRESHOLD:
+            ends_with_sentence = clean_line.rstrip().endswith(
+                (".", "!", "?", "。", "！", "？")
+            )
+            if vis_len < _SEMANTIC_THRESHOLD or ends_with_sentence:
                 result_parts.append("\n")   # semantic newline (within box)
             else:
                 result_parts.append(" ")    # layout wrap (remove)
@@ -113,8 +119,28 @@ def protect(text: str) -> tuple[str, list[tuple[str, str]]]:
     return protected, codes
 
 
+def _unwrap_wrapped_control_codes(text: str) -> str:
+    """Remove stray braces that the LLM may add around control codes."""
+    patterns = (
+        (r"\{(\n\n?)\}", r"\1"),
+        (r"\{(\[[a-zA-Z_]\w*\])\}", r"\1"),
+        (r"\{(\\\\[0-9A-Fa-f]{2})\}", r"\1"),
+        (
+            r"\{(\\(?:CC(?:[0-9A-Fa-f]{2})+|btn[0-9A-Fa-f]{2}|B[0-9A-Fa-f]|\?[0-9A-Fa-f]{2}|[.plnr]))\}",
+            r"\1",
+        ),
+    )
+
+    previous = None
+    while text != previous:
+        previous = text
+        for pattern, replacement in patterns:
+            text = re.sub(pattern, replacement, text)
+    return text
+
+
 def restore(text: str, codes: list[tuple[str, str]]) -> str:
     """Restore control code placeholders to original codes."""
     for placeholder, original in codes:
         text = text.replace(placeholder, original)
-    return text
+    return _unwrap_wrapped_control_codes(text)

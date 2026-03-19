@@ -50,7 +50,11 @@ _TOKEN_RE = re.compile(
     r"\\btn[0-9A-Fa-f]{2}"
     r"|\\CC[0-9A-Fa-f]{4}"
     r"|\\B[0-9A-Fa-f]"
+    r"|\\9[0-9A-Fa-f]{2}"
+    r"|\\F[0-9A-Fa-f]"
+    r"|\\v[0-9A-Fa-f]{2}"
     r"|\\\?[0-9A-Fa-f]{2}"
+    r"|\\\\[0-9A-Fa-f]{2}"
     r"|\\[plnr]"
     r"|\[[a-zA-Z_]\w*\]"
     r"|" + "|".join(re.escape(w) for w in sorted(_COMPOUNDS, key=len, reverse=True))
@@ -65,9 +69,12 @@ def wrap_text(text: str, line_width: int = LINE_WIDTH,
     """Wrap translated text to fit GBA text boxes.
 
     Handles three levels of breaks from the input:
-    - \\n\\n (or \\p, \\.) = paragraph break → always emits \\p
+    - \\n\\n (or \\p, \\.) = paragraph break → always emits \\p (wait for A button)
     - \\n (single) = semantic newline → forced line break within text flow
     - continuous text = auto-wrapped at line_width
+
+    Explicit paragraph breaks are preserved, and wrapped lines are distributed
+    into 2-line text boxes using \\n within a box and \\p between boxes.
     """
     if not text:
         return text
@@ -75,6 +82,7 @@ def wrap_text(text: str, line_width: int = LINE_WIDTH,
     text = text.replace("\r\n", "\n").replace("\r", "\n")
 
     # Step 1: Split on paragraph breaks (\\p, \\., \\n\\n)
+    # These are explicit page breaks from the original text
     _PARA = "\x00PARA\x00"
     text = text.replace("\\.", _PARA)
     text = text.replace("\\p", _PARA)
@@ -101,7 +109,8 @@ def wrap_text(text: str, line_width: int = LINE_WIDTH,
         if not cleaned_segments:
             continue
 
-        # Wrap each segment into display lines, then distribute into boxes
+        # Wrap each segment into display lines, then distribute them across
+        # 2-line text boxes so the third line does not get clipped in-game.
         all_lines: list[str] = []
         for seg in cleaned_segments:
             seg_lines = _wrap_to_lines(seg, line_width)

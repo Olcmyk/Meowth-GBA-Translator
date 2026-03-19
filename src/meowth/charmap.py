@@ -1,6 +1,7 @@
 """Parse Pokemon_GBA_Font_Patch charmap and provide encoding/decoding."""
 
 from pathlib import Path
+import re
 
 from .languages import is_latin_language, postprocess_for_language
 from .resource_path import get_resource_path
@@ -138,6 +139,20 @@ class Charmap:
         text = re.sub(r"(?<!\{[0-9A-Fa-f]{2})\}", "", text)
         return text
 
+    @staticmethod
+    def _unwrap_control_braces(text: str) -> str:
+        """Strip stray braces that LLMs sometimes add around control tokens."""
+        patterns = (
+            r"\{(\[[a-zA-Z_][a-zA-Z0-9_]*\])\}",
+            r"\{((?:\\\\[0-9A-Fa-f]{2})|(?:\\(?:[0-9A-Fa-f]{2}|\?[0-9A-Fa-f]{2}|CC(?:[0-9A-Fa-f]{2})+|btn[0-9A-Fa-f]{2}|B[0-9A-Fa-f]|[pnlr.])))\}",
+        )
+        previous = None
+        while text != previous:
+            previous = text
+            for pattern in patterns:
+                text = re.sub(pattern, r"\1", text)
+        return text
+
     def encode(self, text: str) -> bytes:
         """Encode text to ROM bytes using pcs_codes for control codes + charmap for chars.
 
@@ -146,11 +161,9 @@ class Charmap:
         """
         from .pcs_codes import BACKSLASH_CODES, BRACKET_MACROS
 
-        # Pre-clean: strip stray curly braces around control codes from LLM output
-        import re
-        text = re.sub(r"\{(\\[pnlr.]|\n\n?)\}", r"\1", text)
-        # Also strip {\\?XX}, {\\CCXXXX} etc.
-        text = re.sub(r"\{(\\(?:\?[0-9A-Fa-f]{2}|CC[0-9A-Fa-f]{4}|btn[0-9A-Fa-f]{2}|B[0-9A-Fa-f]))\}", r"\1", text)
+        # Pre-clean: strip stray curly braces around control codes from LLM output.
+        text = self._unwrap_control_braces(text)
+        text = re.sub(r"\{(\n\n?)\}", r"\1", text)
 
         # Sanitize unsupported characters
         text = self._sanitize(text)
@@ -188,6 +201,17 @@ class Charmap:
             # Try backslash codes (longest first)
             matched = False
             if text[i] == "\\":
+                # HMA raw escape: \\XX = FD XX
+                if (
+                    i + 4 <= len(text)
+                    and text[i + 1] == "\\"
+                    and all(c in "0123456789ABCDEFabcdef" for c in text[i + 2 : i + 4])
+                ):
+                    result.append(0xFD)
+                    result.append(int(text[i + 2 : i + 4], 16))
+                    i += 4
+                    continue
+
                 for code_str, code_bytes in BACKSLASH_CODES:
                     if text[i:].startswith(code_str):
                         result.extend(code_bytes)
@@ -218,6 +242,12 @@ class Charmap:
                         result.append(int(pair, 16))
                         i += 6
                         matched = True
+                # Unknown FD macro: \XX -> FD XX
+                if (not matched and i + 3 <= len(text)
+                        and all(c in "0123456789ABCDEFabcdef" for c in text[i + 1 : i + 3])):
+                    result.extend((0xFD, int(text[i + 1 : i + 3], 16)))
+                    i += 3
+                    matched = True
             if matched:
                 continue
 

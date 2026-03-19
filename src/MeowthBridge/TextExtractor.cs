@@ -49,6 +49,12 @@ public class TextExtractor
         ExtractAllPointerTexts(entries, extractedAddresses, ref id, allPointerMap);
         Console.Error.WriteLine($"  指针文本: {entries.Count - beforePtr} 条");
 
+        // Phase 6: 补充 FireRed 中会被严格过滤误伤的短 PC 菜单文本
+        Console.Error.WriteLine("Phase 6: 补充已知漏提取的 FireRed PC 文本...");
+        int beforeKnown = entries.Count;
+        ExtractKnownMissingFireRedPcTexts(entries, extractedAddresses, ref id);
+        Console.Error.WriteLine($"  已知漏项文本: {entries.Count - beforeKnown} 条");
+
         return entries;
     }
 
@@ -322,6 +328,63 @@ public class TextExtractor
         Console.Error.WriteLine($"  (拒绝了 {rejected} 条低质量文本)");
     }
 
+    private void ExtractKnownMissingFireRedPcTexts(
+        List<TextEntry> entries, HashSet<int> extractedAddresses, ref int id)
+    {
+        if (!GetGameCode().StartsWith("BPRE"))
+            return;
+
+        var knownTexts = new[]
+        {
+            (0x4178BE, "menu_pc", new[] { 0x10DA18 }),
+            (0x417B9F, "menu_pcoptions", new[] { 0x09D248 }),
+            (0x417BAC, "menu_pcoptions", new[] { 0x09D1E0 }),
+            (0x417BB6, "menu_pcoptions", new[] { 0x09D11C, 0x09D250 }),
+            (0x417BD3, "menu_pcoptions", new[] { 0x09D128, 0x09D1D4 }),
+            (0x41856C, "menu_pcoptions", new[] { 0x3CDA20 }),
+            (0x41857D, "menu_pcoptions", new[] { 0x3CDA28 }),
+            (0x41858D, "menu_pcoptions", new[] { 0x3CDA30 }),
+            (0x41859A, "menu_pcoptions", new[] { 0x3CDA38 }),
+            (0x4185A5, "menu_pcoptions", new[] { 0x3CDA40 }),
+            (0x4185AD, "menu_pc", new[] { 0x3CDA24 }),
+            (0x418681, "menu_pc", new[] { 0x08C594 }),
+        };
+
+        foreach (var (textAddr, category, ptrSources) in knownTexts)
+        {
+            if (extractedAddresses.Contains(textAddr))
+                continue;
+
+            var textLength = ValidatePcsText(textAddr);
+            if (textLength < 2)
+                continue;
+
+            var text = _model.TextConverter.Convert(_model, textAddr, textLength);
+            if (string.IsNullOrEmpty(text) || text == "\"\"")
+                continue;
+
+            extractedAddresses.Add(textAddr);
+            entries.Add(new TextEntry
+            {
+                Id = $"pc_{id++:D5}",
+                Category = category,
+                Address = $"0x{textAddr:X}",
+                PointerSources = ptrSources.Select(p => $"0x{p:X}").ToList(),
+                Original = text,
+                ByteLength = textLength,
+                IsPointerBased = true
+            });
+        }
+    }
+
+    private string GetGameCode()
+    {
+        Span<byte> code = stackalloc byte[4];
+        for (int i = 0; i < 4; i++)
+            code[i] = _model[0xAC + i];
+        return System.Text.Encoding.ASCII.GetString(code);
+    }
+
     /// <summary>
     /// 验证地址处是否为有效 PCS 文本，返回长度（含 0xFF 终止符），无效返回 0
     /// 覆盖完整 Gen3 PCS 字符集：
@@ -428,25 +491,25 @@ public class TextExtractor
             if (b == 0xFF) // 终止符
             {
                 // 超严格要求：
-                
+
                 // 1. 最少 15 个字母（排除所有短标签和片段）
                 if (letters < 15) return 0;
-                
+
                 // 2. 至少 3 个单词（确保是完整句子或短语）
                 if (words < 3) return 0;
-                
+
                 // 3. 至少 2 个空格（确保有单词分隔）
                 if (spaces < 2) return 0;
-                
+
                 // 4. 字母比例至少 40%（严格过滤二进制数据）
                 if (totalPrintable > 0 && (double)letters / totalPrintable < 0.40) return 0;
-                
+
                 // 5. 总长度至少 20 字节（排除短文本）
                 if (i < 20) return 0;
-                
-                // 6. 必须同时有大写和小写字母（排除全大写标签如 "SOMEONE'S PC"）
-                if (!hasUpperCase || !hasLowerCase) return 0;
-                
+
+                // 6. 必须有字母（移除大小写混合要求，允许全大写文本如 "WITHDRAW ITEMS"）
+                if (!hasUpperCase && !hasLowerCase) return 0;
+
                 // 7. 单词平均长度检查（排除乱码）
                 double avgWordLength = (double)letters / words;
                 if (avgWordLength < 2.0 || avgWordLength > 15.0) return 0;
@@ -560,11 +623,6 @@ public class TextExtractor
     /// </summary>
     private static readonly HashSet<string> TEXT_BLACKLIST = new()
     {
-        // 系统标签
-        "SOMEONE'S PC",
-        "PLAYER'S PC",
-        "BILL'S PC",
-        
         // 短标签
         "PP",
         "HP",
@@ -739,5 +797,3 @@ public class TextEntry
     [JsonPropertyName("translated")]
     public string? Translated { get; set; }
 }
-
-

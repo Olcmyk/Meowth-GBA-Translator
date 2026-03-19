@@ -29,7 +29,7 @@ public static class Program
     {
         if (args.Length < 2)
         {
-            Console.Error.WriteLine("Usage: MeowthBridge extract <rom.gba>");
+            Console.Error.WriteLine("Usage: MeowthBridge extract <rom.gba> [--target-lang LANG]");
             return 1;
         }
 
@@ -37,6 +37,21 @@ public static class Program
         if (!File.Exists(romPath))
         {
             Console.Error.WriteLine($"ROM file not found: {romPath}");
+            return 1;
+        }
+
+        // 解析目标语言参数（默认中文）
+        string targetLang = "zh";
+        for (int i = 2; i < args.Length; i++)
+        {
+            if (args[i] == "--target-lang" && i + 1 < args.Length)
+                targetLang = args[++i].ToLower();
+        }
+
+        var supportError = CheckRomSupport(romPath, targetLang);
+        if (supportError != null)
+        {
+            Console.Error.WriteLine($"Error: {supportError}");
             return 1;
         }
 
@@ -115,7 +130,7 @@ public static class Program
     {
         if (args.Length < 2)
         {
-            Console.Error.WriteLine("Usage: MeowthBridge apply <rom.gba>");
+            Console.Error.WriteLine("Usage: MeowthBridge apply <rom.gba> [--target-lang LANG]");
             return 1;
         }
 
@@ -131,6 +146,21 @@ public static class Program
         {
             Console.Error.WriteLine($"Translations not found: {translationsPath}");
             Console.Error.WriteLine("Run 'translate' first to generate work/text_translated.json");
+            return 1;
+        }
+
+        // 解析目标语言参数（默认中文）
+        string targetLang = "zh";
+        for (int i = 2; i < args.Length; i++)
+        {
+            if (args[i] == "--target-lang" && i + 1 < args.Length)
+                targetLang = args[++i].ToLower();
+        }
+
+        var supportError = CheckRomSupport(romPath, targetLang);
+        if (supportError != null)
+        {
+            Console.Error.WriteLine($"Error: {supportError}");
             return 1;
         }
 
@@ -208,9 +238,13 @@ public static class Program
         Console.Error.WriteLine("Meowth GBA Translator - Three-stage pipeline");
         Console.Error.WriteLine("");
         Console.Error.WriteLine("Usage:");
-        Console.Error.WriteLine("  MeowthBridge extract <rom.gba>              → work/text.json");
-        Console.Error.WriteLine("  MeowthBridge translate [options]             → work/text_translated.json");
-        Console.Error.WriteLine("  MeowthBridge apply <rom.gba>                → outputs/{game}_cn_{timestamp}.gba");
+        Console.Error.WriteLine("  MeowthBridge extract <rom.gba> [--target-lang LANG]  → work/text.json");
+        Console.Error.WriteLine("  MeowthBridge translate [options]                      → work/text_translated.json");
+        Console.Error.WriteLine("  MeowthBridge apply <rom.gba> [--target-lang LANG]    → outputs/{game}_{lang}_{timestamp}.gba");
+        Console.Error.WriteLine("");
+        Console.Error.WriteLine("Target language (default: zh):");
+        Console.Error.WriteLine("  zh           Chinese (requires font patch, blocks decomp ROMs)");
+        Console.Error.WriteLine("  en/fr/de/es  Latin languages (no font patch, allows decomp ROMs)");
         Console.Error.WriteLine("");
         Console.Error.WriteLine("Translate options:");
         Console.Error.WriteLine("  --api-key KEY    API key (or env DEEPSEEK_API_KEY)");
@@ -225,6 +259,64 @@ public static class Program
         Console.Error.WriteLine($"Unknown command: {command}");
         PrintUsage();
         return 1;
+    }
+
+    /// <summary>
+    /// 检测 ROM 是否受支持。
+    /// 支持：原版火红 (BPRE) 和原版绿宝石 (BPEE)
+    /// 不支持：叶绿/红宝石/蓝宝石，以及（中文翻译时）decomp 改版
+    /// 返回 null 表示支持，否则返回错误信息。
+    ///
+    /// 检测方法：
+    /// 1. 游戏代码检测（叶绿/红宝石/蓝宝石）
+    /// 2. 字库补丁特征字节检测（仅中文翻译时检测 decomp）
+    /// </summary>
+    private static string? CheckRomSupport(string romPath, string targetLang)
+    {
+        using var fs = new FileStream(romPath, FileMode.Open, FileAccess.Read);
+        var header = new byte[0xC0];
+        fs.Read(header, 0, header.Length);
+
+        var gameCode = System.Text.Encoding.ASCII.GetString(header, 0xAC, 4);
+
+        // 检测不支持的游戏代码
+        if (gameCode.StartsWith("BPGE"))
+            return "叶绿版 (BPGE) 暂不支持，目前仅支持火红 (BPRE) 和绿宝石 (BPEE)";
+        if (gameCode.StartsWith("AXVE"))
+            return "红宝石 (AXVE) 暂不支持，目前仅支持火红 (BPRE) 和绿宝石 (BPEE)";
+        if (gameCode.StartsWith("AXPE"))
+            return "蓝宝石 (AXPE) 暂不支持，目前仅支持火红 (BPRE) 和绿宝石 (BPEE)";
+
+        // 只处理火红和绿宝石
+        if (!gameCode.StartsWith("BPRE") && !gameCode.StartsWith("BPEE"))
+            return $"未知游戏代码 {gameCode}，暂不支持";
+
+        // 中文翻译需要字库补丁，检测 decomp 改版
+        if (targetLang == "zh")
+        {
+            // 用字库补丁特征字节验证是否为原版（检测 decomp 改版）
+            // 读取前 64KB 用于 pattern 搜索
+            fs.Seek(0, SeekOrigin.Begin);
+            var searchBuf = new byte[0x10000];
+            fs.Read(searchBuf, 0, searchBuf.Length);
+            var hexData = BitConverter.ToString(searchBuf).Replace("-", "").ToLower();
+
+            // step1 pattern: text 函数入口特征
+            var step1Pattern = "3068037801303060181cf838072800d9";
+            // site0 pattern: 字库补丁位置特征
+            var site0Pattern = "80000149401800688746";
+
+            bool hasStep1 = hexData.Contains(step1Pattern);
+            bool hasSite0 = hexData.Contains(site0Pattern);
+
+            if (!hasStep1 || !hasSite0)
+            {
+                var gameName = gameCode.StartsWith("BPRE") ? "火红" : "绿宝石";
+                return $"检测到 {gameName} decomp 改版（字库补丁特征字节不匹配），中文翻译暂不支持 decomp 改版";
+            }
+        }
+
+        return null; // 支持
     }
 
     private static string FindProjectRoot()
