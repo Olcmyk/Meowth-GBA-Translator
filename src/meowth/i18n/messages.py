@@ -36,6 +36,10 @@ class Messages:
     BATCH_SPLIT_MISMATCH = "[Batch split mismatch ({parts} vs {texts}), translating individually]"
     API_REQUEST_FAILED = "[API request failed: {error}, retrying in {wait}s ({attempt}/{max_retries})]"
 
+    # ROM compatibility
+    ROM_UNSUPPORTED_GAME = "Error: {game} is not supported. Only FireRed, LeafGreen, and Emerald are supported."
+    ROM_DECOMP_HACK = "Error: This ROM appears to be a decomp-based hack (game code: {code}). Decomp hacks are not supported for CJK translation due to incompatible font systems."
+
     # Errors
     MEOWTH_BRIDGE_NOT_FOUND = "MeowthBridge executable not found. Build it first: dotnet build src/MeowthBridge -c Release"
     MEOWTH_BRIDGE_FAILED = "MeowthBridge failed (exit {code}):\n{stderr}"

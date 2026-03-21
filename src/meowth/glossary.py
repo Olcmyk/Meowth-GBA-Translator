@@ -38,6 +38,17 @@ CONTEXT_UNSAFE_CATEGORIES = {
     "natures",      # Nature names (brave, timid - common adjectives!)
 }
 
+# Manual overrides per target language: source_text → target_text
+# These take priority over PokeAPI glossary data
+MANUAL_OVERRIDES: dict[str, dict[str, str]] = {
+    "zh-Hans": {
+        "Pokédex": "图鉴",
+        "Pokedex": "图鉴",
+        "POKEDEX": "图鉴",
+        "POKéDEX": "图鉴",
+    },
+}
+
 
 class Glossary:
     def __init__(
@@ -66,6 +77,15 @@ class Glossary:
             self._load_json(json_path)
         else:
             self._load_all(pokeapi_dir)
+
+        # Apply manual overrides (highest priority, overwrite PokeAPI data)
+        overrides = MANUAL_OVERRIDES.get(target_lang, {})
+        for source, target in overrides.items():
+            self.source_to_target[source] = target
+            self._upper_index[source.upper()] = (source, target, "manual")
+            self._term_category[source] = "manual"
+            compact = source.upper().replace(" ", "").replace("-", "")
+            self._compact_index[compact] = target
 
     def _load_json(self, path: Path):
         """Load glossary from pre-built JSON file."""
@@ -153,8 +173,8 @@ class Glossary:
         found: dict[str, str] = {}
         text_upper = text.upper()
         for upper_key, (source, target, category) in self._upper_index.items():
-            # Only include safe categories (proper nouns)
-            if category not in CONTEXT_SAFE_CATEGORIES:
+            # Include safe categories (proper nouns) and manual overrides
+            if category not in CONTEXT_SAFE_CATEGORIES and category != "manual":
                 continue
             if upper_key in text_upper:
                 found[source] = target

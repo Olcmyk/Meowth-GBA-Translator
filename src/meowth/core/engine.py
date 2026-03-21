@@ -89,6 +89,25 @@ def detect_game(rom_path: Path) -> str:
     return _GAME_CODES.get(code, "unknown")
 
 
+# Official GBA Pokémon ROMs always have entry point 0xEA00007F (little-endian).
+# Decomp-compiled ROMs (pokeemerald, pokefirered, etc.) produce a different
+# entry point because the compiled binary has a different size/layout.
+_OFFICIAL_ENTRY_POINT = bytes.fromhex("7f0000ea")
+
+
+def is_decomp_rom(rom_path: Path) -> bool:
+    """Return True if this ROM is a decomp-based hack.
+
+    Decomp ROMs (built from pokeemerald / pokefirered source) have a different
+    ARM branch instruction at offset 0x00 compared to official binary ROMs.
+    Binary hacks (applied on top of the original ROM) preserve the official
+    entry point, so this correctly distinguishes the two.
+    """
+    with open(rom_path, "rb") as f:
+        entry = f.read(4)
+    return entry != _OFFICIAL_ENTRY_POINT
+
+
 def convert_format(data: dict) -> dict:
     """Convert MeowthBridge entries format to tables + free_texts format."""
     if "tables" in data:
@@ -463,6 +482,18 @@ class TranslationEngine:
             self._log("info", Messages.DETECTED_GAME.format(game=self.config.game))
         else:
             self._log("warning", Messages.GAME_DETECTION_FAILED.format(game=self.config.game))
+
+        # Compatibility check 1: reject Ruby/Sapphire
+        if self.config.game in ("ruby", "sapphire"):
+            raise RuntimeError(Messages.ROM_UNSUPPORTED_GAME.format(game=self.config.game))
+
+        # Compatibility check 2: reject decomp hacks when targeting CJK
+        from ..languages import is_cjk_language
+        if is_cjk_language(self.config.target_lang) and is_decomp_rom(rom_path):
+            with open(rom_path, "rb") as _f:
+                _f.seek(0xAC)
+                _raw_code = _f.read(4).decode("ascii", errors="replace")
+            raise RuntimeError(Messages.ROM_DECOMP_HACK.format(code=_raw_code))
 
         # Generate output filename
         original_name = rom_path.stem
