@@ -203,18 +203,18 @@ class Translator:
         cache_key = self._cache_key(request_data)
         cached = self._get_cached(cache_key)
         if cached is not None:
-            parts = [t.strip() for t in cached.split("|||")]
+            parts = [t.strip() for t in cached.split("|||") if t.strip()]
             if len(parts) == len(texts):
                 return parts
             # Cache had misaligned result — fall through to re-translate
             from .i18n import Messages
             print(Messages.CACHE_MISMATCH.format(parts=len(parts), texts=len(texts)))
 
-        # Call DeepSeek API
+        # Call API
         content = self._call_api(system, user)
 
-        # Split and check alignment
-        parts = [t.strip() for t in content.split("|||")]
+        # Split and check alignment (filter empty strings from trailing |||)
+        parts = [t.strip() for t in content.split("|||") if t.strip()]
         if len(parts) == len(texts):
             # Perfect split — cache and return
             has_untranslated = any(
@@ -256,7 +256,7 @@ class Translator:
                 )
                 response.raise_for_status()
                 return response.json()["choices"][0]["message"]["content"]
-            except (httpx.RemoteProtocolError, httpx.ReadTimeout, httpx.ConnectError) as e:
+            except (httpx.RemoteProtocolError, httpx.ReadTimeout, httpx.ConnectError, httpx.NetworkError) as e:
                 if attempt < max_retries - 1:
                     wait = 2 ** attempt
                     from .i18n import Messages
@@ -274,10 +274,7 @@ class Translator:
         system = self.prompts["system"].replace("{glossary}", glossary_context or "（无）")
         results = []
         for text in texts:
-            # Build single-text user prompt from the template
-            user = self.prompts["user"].replace(
-                "{texts}", text
-            ).split("\n")[0] + f"\n\n{text}"
+            user = self.prompts["user"].replace("{texts}", text)
 
             request_data = {
                 "model": self.model,

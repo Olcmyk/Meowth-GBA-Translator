@@ -27,10 +27,11 @@ _GAME_CODES: dict[str, str] = {
     "AXPE": "sapphire",
 }
 
-# Table categories
+# Table categories (routed through _translate_table instead of LLM free-text batches)
 TABLE_CATEGORIES = {
     "pokemon_names", "move_names", "ability_names", "nature_names",
     "type_names", "item_names", "trainer_classes", "map_names",
+    "battle_text",  # Emerald battle messages with \\00/\\0F/\\34 runtime variables
 }
 
 # Hardcoded translations (FireRed + Chinese only)
@@ -74,10 +75,11 @@ _TRAINER_CLASS_OVERRIDES: dict[str, str] = {
     "RIVAL": "劲敌",
 }
 
-# Menu item translations (shortened to fit byte limits)
-# Note: With automatic pointer detection, most items can now use full translations
-_MENU_ITEM_OVERRIDES: dict[str, str] = {
-    # Reserved for future manual overrides if needed
+# Term overrides by original text (applied before LLM, all games, Chinese only)
+_TERM_OVERRIDES: dict[str, str] = {
+    "POKéDEX": "图鉴",
+    "POKéMON": "宝可梦",
+    "POKéNAV": "导航仪",
 }
 
 
@@ -225,7 +227,7 @@ class TranslationEngine:
         def process_batch(idx_batch):
             idx, batch = idx_batch
             self._translate_free_batch(batch)
-            return idx
+            return idx, batch
 
         with ThreadPoolExecutor(max_workers=self.config.max_workers) as executor:
             futures = {
@@ -234,10 +236,13 @@ class TranslationEngine:
             }
             for future in as_completed(futures):
                 done_count += 1
-                idx = future.result()
+                idx, batch = future.result()
                 self._log("info", Messages.BATCH_COMPLETE.format(
                     current=done_count, total=total, batch_id=idx + 1
                 ))
+                sample = next((e for e in batch if e.get("translated")), None)
+                if sample:
+                    print(f"  e.g. {sample['original']!r} → {sample['translated']!r}")
                 self.callbacks.on_progress("translate", done_count, total,
                     f"Batch {idx + 1} completed")
 
@@ -252,6 +257,10 @@ class TranslationEngine:
         category = table["category"]
         for entry in table["entries"]:
             original = entry["original"].strip('"')
+            # Check term overrides (all games, Chinese only)
+            if self.config.target_lang == "zh-Hans" and original in _TERM_OVERRIDES:
+                entry["translated"] = _TERM_OVERRIDES[original]
+                continue
             # Check manual overrides
             if (category == "trainer_classes" and
                 self.config.target_lang == "zh-Hans" and
@@ -265,14 +274,18 @@ class TranslationEngine:
                 if ok:
                     entry["translated"] = zh
                     continue
-            # For descriptions, use LLM
-            if "description" in category:
+            # For descriptions, map names without glossary match, and battle text: use LLM
+            if "description" in category or (category == "map_names" and not zh) or category == "battle_text":
                 protected, codes = protect(original)
                 glossary_ctx = self._format_glossary(original)
-                results = self.translator.translate_batch([protected], glossary_ctx)
-                clean = _strip_llm_newlines(results[0])
-                translated = restore(clean, codes)
-                entry["translated"] = translated
+                try:
+                    results = self.translator.translate_batch([protected], glossary_ctx)
+                    clean = _strip_llm_newlines(results[0])
+                    translated = restore(clean, codes)
+                    entry["translated"] = translated
+                except Exception as e:
+                    print(f"[Table entry LLM failed: {e}, keeping original]")
+                    entry["translated"] = original
             elif zh:
                 entry["translated"] = zh
             else:
@@ -284,7 +297,11 @@ class TranslationEngine:
         remaining = []
         for entry in batch:
             entry_id = entry.get("id", "")
-            if (self.config.game == "firered" and
+            original = entry.get("original", "").strip('"')
+            if (self.config.target_lang == "zh-Hans" and
+                original in _TERM_OVERRIDES):
+                entry["translated"] = _TERM_OVERRIDES[original]
+            elif (self.config.game == "firered" and
                 self.config.target_lang == "zh-Hans" and
                 entry_id in _HARDCODED_TRANSLATIONS):
                 entry["translated"] = _HARDCODED_TRANSLATIONS[entry_id]
@@ -309,7 +326,13 @@ class TranslationEngine:
         glossary_ctx = self._format_glossary(all_text)
 
         # Translate
-        results = self.translator.translate_batch(protected_list, glossary_ctx)
+        try:
+            results = self.translator.translate_batch(protected_list, glossary_ctx)
+        except Exception as e:
+            print(f"[Batch failed after retries: {e}, keeping originals]")
+            for entry in remaining:
+                entry["translated"] = entry["original"]
+            return
 
         # Restore and wrap
         for i, entry in enumerate(remaining):
