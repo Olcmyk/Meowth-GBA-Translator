@@ -255,6 +255,8 @@ class TranslationEngine:
     def _translate_table(self, table: dict):
         """Translate a table's entries using glossary lookup."""
         category = table["category"]
+        needs_llm: list[dict] = []  # entries deferred to batch LLM call
+
         for entry in table["entries"]:
             original = entry["original"].strip('"')
             # Check term overrides (all games, Chinese only)
@@ -274,22 +276,63 @@ class TranslationEngine:
                 if ok:
                     entry["translated"] = zh
                     continue
-            # For descriptions, map names without glossary match, and battle text: use LLM
+            # Descriptions, map names without glossary match, and battle text:
+            # defer to batch LLM call instead of one-by-one to avoid 500+ API calls
             if "description" in category or (category == "map_names" and not zh) or category == "battle_text":
-                protected, codes = protect(original)
-                glossary_ctx = self._format_glossary(original)
-                try:
-                    results = self.translator.translate_batch([protected], glossary_ctx)
-                    clean = _strip_llm_newlines(results[0])
-                    translated = restore(clean, codes)
-                    entry["translated"] = translated
-                except Exception as e:
-                    print(f"[Table entry LLM failed: {e}, keeping original]")
-                    entry["translated"] = original
+                needs_llm.append(entry)
             elif zh:
                 entry["translated"] = zh
             else:
                 entry["translated"] = original
+
+        # Batch translate all deferred LLM entries
+        if needs_llm:
+            self._translate_table_llm_batch(needs_llm)
+
+    def _translate_table_llm_batch(self, entries: list[dict]):
+        """Batch LLM translate table entries (descriptions, map names, battle text).
+
+        Filters out entries that are pure control codes (nothing for LLM to
+        translate), then sends the rest in batches of batch_size, same as
+        free-text processing.
+        """
+        import re
+
+        # Separate: entries with real text vs pure control-code entries
+        to_translate: list[tuple[dict, str, list]] = []  # (entry, protected, codes)
+        for entry in entries:
+            original = entry["original"].strip('"')
+            protected, codes = protect(original)
+            # Count actual alphabetic letters after stripping {C0}-style placeholders
+            cleaned = re.sub(r"\{C\d+\}", "", protected)
+            if sum(c.isalpha() for c in cleaned) >= 2:
+                to_translate.append((entry, protected, codes))
+            else:
+                # Pure control codes – keep original, nothing to translate
+                entry["translated"] = original
+
+        if not to_translate:
+            return
+
+        # Batch translate in groups of batch_size (same as free texts)
+        batch_size = self.config.batch_size
+        for i in range(0, len(to_translate), batch_size):
+            chunk = to_translate[i : i + batch_size]
+            protected_list = [p for _, p, _ in chunk]
+            all_text = " ".join(e["original"] for e, _, _ in chunk)
+            glossary_ctx = self._format_glossary(all_text)
+
+            try:
+                results = self.translator.translate_batch(protected_list, glossary_ctx)
+            except Exception as e:
+                print(f"[Table batch LLM failed: {e}, keeping originals]")
+                for entry, _, _ in chunk:
+                    entry["translated"] = entry["original"].strip('"')
+                continue
+
+            for (entry, _, codes), result in zip(chunk, results):
+                clean = _strip_llm_newlines(result)
+                entry["translated"] = restore(clean, codes)
 
     def _translate_free_batch(self, batch: list[dict]):
         """Translate a batch of free text entries via LLM."""
