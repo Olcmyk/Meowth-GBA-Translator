@@ -91,23 +91,33 @@ def detect_game(rom_path: Path) -> str:
     return _GAME_CODES.get(code, "unknown")
 
 
-# Official GBA Pokémon ROMs always have entry point 0xEA00007F (little-endian).
-# Decomp-compiled ROMs (pokeemerald, pokefirered, etc.) produce a different
-# entry point because the compiled binary has a different size/layout.
-_OFFICIAL_ENTRY_POINT = bytes.fromhex("7f0000ea")
+# Known font-rendering function addresses and expected THUMB prologue bytes for
+# official binary ROMs. Decomp ROMs (pokeemerald, pokefirered, etc.) are
+# recompiled from source, so these addresses contain completely different code.
+_FONT_HOOK_SIGNATURES: dict[str, list[tuple[int, bytes]]] = {
+    "firered":   [(0x5790, b"\x70\xb5"), (0x5ed4, b"\xf0\xb5")],
+    "leafgreen": [(0x5790, b"\x70\xb5"), (0x5ed4, b"\xf0\xb5")],
+    "emerald":   [(0x57b4, b"\x70\xb5"), (0x5ed8, b"\xf0\xb5")],
+}
 
 
-def is_decomp_rom(rom_path: Path) -> bool:
-    """Return True if this ROM is a decomp-based hack.
+def is_decomp_rom(rom_path: Path, game: str) -> bool:
+    """Return True if this ROM is incompatible with the font patch.
 
-    Decomp ROMs (built from pokeemerald / pokefirered source) have a different
-    ARM branch instruction at offset 0x00 compared to official binary ROMs.
-    Binary hacks (applied on top of the original ROM) preserve the official
-    entry point, so this correctly distinguishes the two.
+    Checks whether the bytes at known font-rendering function addresses match
+    the official binary ROM. Decomp ROMs (pokeemerald, pokefirered, etc.) are
+    recompiled from source, so these addresses contain completely different code.
+    Binary hacks applied on top of the original ROM preserve these bytes.
     """
+    sigs = _FONT_HOOK_SIGNATURES.get(game)
+    if sigs is None:
+        return False  # unknown game, skip check
     with open(rom_path, "rb") as f:
-        entry = f.read(4)
-    return entry != _OFFICIAL_ENTRY_POINT
+        for offset, expected in sigs:
+            f.seek(offset)
+            if f.read(len(expected)) != expected:
+                return True
+    return False
 
 
 def convert_format(data: dict) -> dict:
@@ -548,7 +558,7 @@ class TranslationEngine:
 
         # Compatibility check 2: reject decomp hacks when targeting CJK
         from ..languages import is_cjk_language
-        if is_cjk_language(self.config.target_lang) and is_decomp_rom(rom_path):
+        if is_cjk_language(self.config.target_lang) and is_decomp_rom(rom_path, self.config.game):
             with open(rom_path, "rb") as _f:
                 _f.seek(0xAC)
                 _raw_code = _f.read(4).decode("ascii", errors="replace")
