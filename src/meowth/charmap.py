@@ -218,6 +218,15 @@ class Charmap:
                         result.append(int(pair, 16))
                         i += 6
                         matched = True
+                # \\XX (single backslash + 2 hex digits) = FD escape (runtime variables)
+                # e.g. \00 = player pokemon, \0F = opponent pokemon, \34 = EXP amount
+                if not matched and i + 2 < len(text):
+                    pair = text[i + 1 : i + 3]
+                    if len(pair) == 2 and all(c in "0123456789ABCDEFabcdef" for c in pair):
+                        result.append(0xFD)
+                        result.append(int(pair, 16))
+                        i += 3
+                        matched = True
             if matched:
                 continue
 
