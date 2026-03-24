@@ -3,6 +3,7 @@
 import hashlib
 import json
 import os
+import sys
 import threading
 import time
 from pathlib import Path
@@ -11,7 +12,21 @@ import httpx
 
 from .languages import get_language_name, get_language_name_zh
 
-DEFAULT_CACHE_DIR = Path(__file__).parent.parent.parent / "work" / "cache"
+
+def _get_default_cache_dir() -> Path:
+    """Get default cache directory — writable in both dev and PyInstaller bundle."""
+    if getattr(sys, '_MEIPASS', None):  # Running in PyInstaller bundle
+        if sys.platform == "darwin":
+            return Path.home() / "Library" / "Caches" / "Meowth" / "work" / "cache"
+        elif sys.platform == "win32":
+            return Path.home() / "AppData" / "Local" / "Meowth" / "Cache" / "work" / "cache"
+        else:
+            return Path.home() / ".cache" / "Meowth" / "work" / "cache"
+    # Dev / CLI: use work/cache relative to project root
+    return Path(__file__).parent.parent.parent / "work" / "cache"
+
+
+DEFAULT_CACHE_DIR = _get_default_cache_dir()
 
 # Well-known provider presets: provider_name -> (base_url, default_model, env_var)
 PROVIDER_PRESETS: dict[str, tuple[str, str, str]] = {

@@ -191,6 +191,7 @@ class TranslationEngine:
             api_key=config.api_key,
             api_key_env=config.api_key_env,
             model=config.model,
+            cache_dir=config.work_dir / "cache",
         )
 
     def _log(self, level: str, message: str):
@@ -403,54 +404,46 @@ class TranslationEngine:
     def extract_texts(rom_path: Path, output_path: Path) -> Path:
         """Extract texts from ROM using MeowthBridge."""
         import os
+        import shutil as _shutil
+        from ..resource_path import get_resource_path
+
         exe = TranslationEngine.find_meowth_bridge()
+        output_path = output_path.resolve()
         output_path.parent.mkdir(parents=True, exist_ok=True)
+        rom_abs = rom_path.resolve()
 
-        # Determine working directory for MeowthBridge
-        # - In packaged mode: MeowthBridge directory has bundled resources/
-        # - In dev mode: project root has resources/
-        original_cwd = Path.cwd()
-        bridge_dir = exe.parent
+        # Use output_path.parent (the work dir) as MeowthBridge's CWD.
+        # This is always a writable directory (e.g. ~/Library/Caches/Meowth/work).
+        cwd = output_path.parent
 
-        # Check if resources exists in bridge directory (packaged mode)
-        if (bridge_dir / "resources").exists():
-            work_dir = bridge_dir
-        else:
-            # Dev mode: use project root where resources/ exists
-            # Find project root by looking for HexManiacAdvance submodule
-            project_root = bridge_dir
-            while project_root.parent != project_root:
-                if (project_root / "HexManiacAdvance").exists():
-                    break
-                project_root = project_root.parent
-            work_dir = project_root
+        # MeowthBridge (via HMA) needs resources/ to exist in its CWD.
+        # Find the actual resources directory and symlink/copy it into cwd.
+        resources_src = get_resource_path("resources")
+        resources_dst = cwd / "resources"
+        if resources_src.exists() and not resources_dst.exists():
+            try:
+                os.symlink(resources_src, resources_dst)
+            except (OSError, NotImplementedError):
+                _shutil.copytree(str(resources_src), str(resources_dst))
 
-        os.chdir(work_dir)
-
-        try:
-            # Use absolute paths for ROM and output since we changed directory
-            rom_abs = rom_path.resolve()
-            output_abs = output_path.resolve()
-
-            result = subprocess.run(
-                [str(exe), "extract", str(rom_abs)],
-                capture_output=True, text=True,
-            )
-            if result.returncode != 0:
-                raise RuntimeError(
-                    Messages.MEOWTH_BRIDGE_FAILED.format(
-                        code=result.returncode, stderr=result.stderr
-                    )
+        result = subprocess.run(
+            [str(exe), "extract", str(rom_abs)],
+            capture_output=True, text=True,
+            cwd=str(cwd),
+        )
+        if result.returncode != 0:
+            raise RuntimeError(
+                Messages.MEOWTH_BRIDGE_FAILED.format(
+                    code=result.returncode, stderr=result.stderr
                 )
-            # MeowthBridge outputs to work/text.json in its working directory
-            hardcoded = Path("work/text.json")
-            if hardcoded.exists():
-                import shutil
-                shutil.move(str(hardcoded), str(output_abs))
-            if not output_abs.exists():
-                raise RuntimeError(Messages.MEOWTH_BRIDGE_NO_OUTPUT.format(path=output_abs))
-        finally:
-            os.chdir(original_cwd)
+            )
+
+        # MeowthBridge writes output to <cwd>/work/text.json
+        hardcoded = cwd / "work" / "text.json"
+        if hardcoded.exists():
+            _shutil.move(str(hardcoded), str(output_path))
+        if not output_path.exists():
+            raise RuntimeError(Messages.MEOWTH_BRIDGE_NO_OUTPUT.format(path=output_path))
 
         _postprocess_fd_macros(output_path)
         return output_path
