@@ -148,6 +148,14 @@ class Glossary:
         compact = source_text.upper().replace(" ", "").replace("-", "")
         return self._compact_index.get(compact)
 
+    def add_term(self, source: str, target: str, category: str = "dynamic") -> None:
+        """Add a dynamic term to the glossary (e.g. from translated tables)."""
+        self.source_to_target[source] = target
+        self._upper_index[source.upper()] = (source, target, category)
+        self._term_category[source] = category
+        compact = source.upper().replace(" ", "").replace("-", "")
+        self._compact_index[compact] = target
+
     def apply_to_text(self, text: str) -> str:
         """Apply glossary replacements to text using word-boundary matching."""
         import re
@@ -174,7 +182,7 @@ class Glossary:
         text_upper = text.upper()
         for upper_key, (source, target, category) in self._upper_index.items():
             # Include safe categories (proper nouns) and manual overrides
-            if category not in CONTEXT_SAFE_CATEGORIES and category != "manual":
+            if category not in CONTEXT_SAFE_CATEGORIES and category not in ("manual", "dynamic"):
                 continue
             if upper_key in text_upper:
                 found[source] = target

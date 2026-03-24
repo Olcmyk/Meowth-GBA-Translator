@@ -299,6 +299,15 @@ class TranslationEngine:
         if needs_llm:
             self._translate_table_llm_batch(needs_llm)
 
+        # Inject map_names and pokemon_names into glossary for consistency
+        # (so free-text LLM calls can reference these translations)
+        if category in ("map_names", "pokemon_names"):
+            for entry in table["entries"]:
+                original = entry["original"].strip('"')
+                translated = entry.get("translated", "")
+                if translated and translated != original:
+                    self.glossary.add_term(original, translated, "dynamic")
+
     def _translate_table_llm_batch(self, entries: list[dict]):
         """Batch LLM translate table entries (descriptions, map names, battle text).
 
