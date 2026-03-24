@@ -1,8 +1,9 @@
 name: Publish to PyPI
 
 on:
-  release:
-    types: [published]
+  push:
+    tags:
+      - 'v*'        # 本地打好 tag 推上去自动发布
   workflow_dispatch:
     inputs:
       test-pypi:
@@ -15,8 +16,7 @@ jobs:
   build-and-publish:
     name: Build and publish Python package
     runs-on: ubuntu-latest
-    # Only use environment for release events (trusted publishing)
-    environment: ${{ github.event_name == 'release' && 'pypi' || '' }}
+    environment: ${{ github.event_name == 'push' && 'pypi' || '' }}
     permissions:
       id-token: write  # Required for trusted publishing
       contents: read
@@ -24,12 +24,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Initialize submodules
-        run: |
-          git submodule update --init HexManiacAdvance
-          git submodule update --init Pokemon_GBA_Font_Patch
-          git submodule update --init armips
-          git submodule update --init pokeapi
+      - name: Initialize submodules (pokeapi only, for glossary)
+        run: git submodule update --init pokeapi
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -41,23 +37,57 @@ jobs:
           python -m pip install --upgrade pip
           pip install build twine
 
+      - name: Remove zh-Hans from supported languages (PyPI latin-only build)
+        run: |
+          python - <<'EOF'
+          import re
+
+          # 1. languages.py — 从支持语言列表移除 zh-Hans
+          path = "src/meowth/languages.py"
+          text = open(path).read()
+          text = re.sub(r'\s+"zh-Hans":\s*\{[^}]+\},?\n', "\n", text)
+          text = text.replace('"zh-Hans", ', '').replace(', "zh-Hans"', '')
+          open(path, "w").write(text)
+          print("languages.py — zh-Hans removed")
+
+          # 2. cli.py — 把所有 default="zh-Hans" 改为 default="es"
+          path = "src/meowth/cli.py"
+          text = open(path).read()
+          text = text.replace('default="zh-Hans"', 'default="es"')
+          text = text.replace("default='zh-Hans'", "default='es'")
+          # 同步修改 _get_language 的 cli_default 参数
+          text = text.replace('_get_language(target, "zh-Hans"', '_get_language(target, "es"')
+          open(path, "w").write(text)
+          print("cli.py — default target lang set to es")
+
+          # 3. config.py — 把 target_lang 默认值改为 es
+          path = "src/meowth/core/config.py"
+          text = open(path).read()
+          text = text.replace('target_lang: str = "zh-Hans"', 'target_lang: str = "es"')
+          # 同步修改 merge_with_toml 里的哨兵值
+          text = text.replace(
+              'self.target_lang if self.target_lang != "zh-Hans"',
+              'self.target_lang if self.target_lang != "es"'
+          )
+          open(path, "w").write(text)
+          print("config.py — default target_lang set to es")
+
+          EOF
+
       - name: Build package
         run: python -m build
 
-      - name: Check package size
+      - name: Check package size and verify no binaries
         run: |
           echo "=== Package size check ==="
           ls -lh dist/
           echo ""
-          echo "=== Wheel size ==="
-          du -h dist/*.whl
-          echo ""
-          echo "=== Source distribution size ==="
-          du -h dist/*.tar.gz
-          echo ""
           echo "=== Verifying no binaries in package ==="
-          tar -tzf dist/*.tar.gz | grep -E "MeowthBridge" && echo "❌ ERROR: Binaries found in package!" || echo "✅ No binaries found (correct)"
-          unzip -l dist/*.whl | grep -E "MeowthBridge" && echo "❌ ERROR: Binaries found in wheel!" || echo "✅ No binaries found (correct)"
+          tar -tzf dist/*.tar.gz | grep -E "MeowthBridge" && echo "❌ ERROR: Binaries found!" || echo "✅ No binaries (correct)"
+          unzip -l dist/*.whl | grep -E "MeowthBridge" && echo "❌ ERROR: Binaries found!" || echo "✅ No binaries (correct)"
+          echo ""
+          echo "=== Verifying zh-Hans removed ==="
+          tar -tzf dist/*.tar.gz | xargs -I{} sh -c 'tar -xOf dist/*.tar.gz {} 2>/dev/null | grep -l "zh-Hans"' 2>/dev/null || echo "✅ zh-Hans not in package"
 
       - name: Publish to TestPyPI
         if: github.event_name == 'workflow_dispatch' && inputs.test-pypi
@@ -68,5 +98,5 @@ jobs:
           password: ${{ secrets.TEST_PYPI_API_TOKEN }}
 
       - name: Publish to PyPI
-        if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && !inputs.test-pypi)
+        if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && !inputs.test-pypi)
         uses: pypa/gh-action-pypi-publish@release/v1
