@@ -436,6 +436,7 @@ class TranslationEngine:
         # Apply font patch for CJK languages
         if is_cjk_language(self.config.target_lang):
             self._log("info", Messages.APPLYING_FONT_PATCH)
+            output_path.parent.mkdir(parents=True, exist_ok=True)
             temp_rom = output_path.parent / "temp_fontpatch.gba"
             writer.save_rom(rom, temp_rom)
             apply_font_patch(temp_rom, temp_rom, game=self.config.game)
@@ -505,6 +506,9 @@ class TranslationEngine:
         # Find the actual resources directory and symlink/copy it into cwd.
         resources_src = get_resource_path("resources")
         resources_dst = cwd / "resources"
+        # Remove broken symlink if present (lexists=True but exists=False)
+        if resources_dst.is_symlink() and not resources_dst.exists():
+            resources_dst.unlink()
         if resources_src.exists() and not resources_dst.exists():
             try:
                 os.symlink(resources_src, resources_dst)

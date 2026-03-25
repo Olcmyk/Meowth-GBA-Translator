@@ -78,18 +78,20 @@ def apply_font_patch(
     if cfg["use_strequ"]:
         cmd = [
             str(armips_path),
-            str(asm_file),
-            "-strequ", "Origin_Rom", str(baserom),
-            "-strequ", "Chinese_Patched_Rom", str(patched),
+            cfg["asm"],
+            "-strequ", "Origin_Rom", cfg["baserom"],
+            "-strequ", "Chinese_Patched_Rom", cfg["output"],
         ]
     else:
-        cmd = [str(armips_path), str(asm_file)]
+        cmd = [str(armips_path), cfg["asm"]]
 
     result = subprocess.run(
         cmd,
         cwd=str(font_patch_dir),
         capture_output=True,
         text=True,
+        encoding='utf-8',
+        errors='replace',
     )
 
     if result.returncode != 0:
