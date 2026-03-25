@@ -1,5 +1,9 @@
 name: Build MeowthBridge
 
+concurrency:
+  group: build-csharp-${{ github.event.release.tag_name || github.ref }}
+  cancel-in-progress: false
+
 on:
   workflow_call:
     outputs:
@@ -10,6 +14,8 @@ on:
   release:
     types: [published]
   push:
+    tags:
+      - 'v*'
     paths:
       - 'src/MeowthBridge/**'
       - '.github/workflows/build-csharp.yml'
@@ -206,6 +212,15 @@ jobs:
     permissions:
       contents: write  # Required to upload files to release
     steps:
+      - name: Resolve release tag
+        id: release-tag
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            echo "tag=${{ github.event.release.tag_name }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Download Windows binary
         uses: actions/download-artifact@v4
         with:
@@ -240,20 +255,26 @@ jobs:
       - name: Upload Windows binary to Release
         uses: softprops/action-gh-release@v1
         with:
+          tag_name: ${{ steps.release-tag.outputs.tag }}
           files: MeowthBridge-windows.zip
+          overwrite_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload macOS binary to Release
         uses: softprops/action-gh-release@v1
         with:
+          tag_name: ${{ steps.release-tag.outputs.tag }}
           files: MeowthBridge-macos.zip
+          overwrite_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload Linux binary to Release
         uses: softprops/action-gh-release@v1
         with:
+          tag_name: ${{ steps.release-tag.outputs.tag }}
           files: MeowthBridge-linux.zip
+          overwrite_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

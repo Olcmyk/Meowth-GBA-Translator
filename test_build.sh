@@ -1,12 +1,19 @@
 #!/bin/bash
 set -e
 
+ROM_PATH="testgba/1636 - Pokemon Fire Red (U)(Squirrels).gba"
+
+if [ ! -f "$ROM_PATH" ]; then
+    echo "ERROR: Test ROM not found: $ROM_PATH"
+    exit 1
+fi
+
 echo "=== Testing Build Process Locally ==="
 
 # 1. Check MeowthBridge can find resources
 echo ""
 echo "1. Testing MeowthBridge resource resolution..."
-./src/meowth/binaries/macos/MeowthBridge extract testgba/firered_en.gba -o /tmp/test_extract.json || {
+./src/meowth/binaries/macos/MeowthBridge extract "$ROM_PATH" -o /tmp/test_extract.json || {
     echo "ERROR: MeowthBridge failed to extract"
     exit 1
 }
@@ -25,15 +32,16 @@ echo "✓ Resources directory exists"
 # 3. Check PyInstaller structure
 echo ""
 echo "3. Simulating PyInstaller structure..."
-mkdir -p /tmp/test_bundle/Contents/meowth/binaries/macos
-mkdir -p /tmp/test_bundle/Contents/resources
-cp src/meowth/binaries/macos/MeowthBridge /tmp/test_bundle/Contents/meowth/binaries/macos/
-cp -r resources/* /tmp/test_bundle/Contents/resources/
+rm -rf /tmp/test_bundle
+mkdir -p /tmp/test_bundle/Contents/meowth/binaries
+cp -R src/meowth/binaries/macos /tmp/test_bundle/Contents/meowth/binaries/
+mkdir -p /tmp/test_bundle/Contents/meowth/binaries/macos/resources
+cp -r resources/* /tmp/test_bundle/Contents/meowth/binaries/macos/resources/
 chmod +x /tmp/test_bundle/Contents/meowth/binaries/macos/MeowthBridge
 
 echo "Testing from bundle structure..."
 cd /tmp/test_bundle/Contents/meowth/binaries/macos
-./MeowthBridge extract /Users/booffaoex/code/Meowth-GBA-Translator/testgba/firered_en.gba -o /tmp/test_bundle_extract.json || {
+./MeowthBridge extract "/Users/booffaoex/code/Meowth-GBA-Translator/$ROM_PATH" -o /tmp/test_bundle_extract.json || {
     echo "ERROR: MeowthBridge failed in bundle structure"
     cd /Users/booffaoex/code/Meowth-GBA-Translator
     exit 1
@@ -63,11 +71,18 @@ echo "✓ All required files present"
 # 5. Test Python imports
 echo ""
 echo "5. Testing Python imports..."
-PYTHONPATH=src python -c "
-from meowth.gui.app import main
+PYTHONPATH=src python3 -c "
 from meowth.core.engine import TranslationEngine
 from meowth.core.config import TranslationConfig
-print('✓ All imports work')
+try:
+    from meowth.gui.app import main
+    print('✓ GUI imports work')
+except ModuleNotFoundError as exc:
+    if exc.name == 'customtkinter':
+        print('✓ GUI import skipped (optional dependency customtkinter not installed)')
+    else:
+        raise
+print('✓ Core imports work')
 "
 
 echo ""

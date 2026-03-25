@@ -1,0 +1,16 @@
+[translation]
+# LLM provider preset. Supported: deepseek, openai, google, groq, mistral,
+# openrouter, siliconflow, zhipu, moonshot, qwen, anthropic
+provider = "deepseek"
+model = "deepseek-chat"
+source_language = "en"
+target_language = "zh-Hans"
+
+[translation.api]
+# Set the actual key in your shell or .env file.
+key_env = "DEEPSEEK_API_KEY"
+# base_url = "https://api.deepseek.com/v1"
+
+[output]
+dir = "outputs"
+cache_dir = "work/cache"

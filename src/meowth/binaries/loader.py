@@ -12,13 +12,32 @@ import zipfile
 from pathlib import Path
 
 
+def _read_repo_version() -> str | None:
+    """Read the package version from pyproject.toml when available."""
+    project_root = Path(__file__).resolve().parents[3]
+    pyproject_path = project_root / "pyproject.toml"
+    if not pyproject_path.exists():
+        return None
+
+    for line in pyproject_path.read_text(encoding="utf-8").splitlines():
+        if line.startswith("version = "):
+            return line.split("=", 1)[1].strip().strip('"').strip("'")
+    return None
+
+
 def get_meowth_version() -> str:
     """Get the current meowth package version."""
+    # Prefer the source checkout version when running from the repository,
+    # even if an older meowth package is installed globally.
+    repo_version = _read_repo_version()
+    if repo_version:
+        return repo_version
+
     try:
         import importlib.metadata
         return importlib.metadata.version("meowth")
     except Exception:
-        return "0.3.2"
+        return "0.0.0"
 
 
 def get_platform_name() -> str:
