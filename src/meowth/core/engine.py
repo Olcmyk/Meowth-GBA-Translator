@@ -11,8 +11,10 @@ from ..font_patch import apply_font_patch
 from ..glossary import Glossary
 from ..i18n import Messages
 from ..korean_font import prepare_korean_font_patch
+from ..korean_text import fit_korean_fixed_text
 from ..languages import is_cjk_language
 from ..pcs_codes import FD_MACROS
+from ..pcs_scanner import is_real_text
 from ..rom_writer import RomWriter
 from ..text_wrap import wrap_text
 from ..translator import Translator
@@ -28,10 +30,16 @@ _GAME_CODES: dict[str, str] = {
     "AXPE": "sapphire",
 }
 
-# Table categories (routed through _translate_table instead of LLM free-text batches)
-TABLE_CATEGORIES = {
+FIXED_WIDTH_TABLE_CATEGORIES = {
     "pokemon_names", "move_names", "ability_names", "nature_names",
     "type_names", "item_names", "trainer_classes", "map_names",
+    "habitat_names", "menu_options", "menu_pc", "menu_pcoptions",
+    "menu_pokemon", "menu_item_storage", "menu_pause",
+    "menu_pokemon_options",
+}
+
+# Table categories (routed through _translate_table instead of LLM free-text batches)
+TABLE_CATEGORIES = FIXED_WIDTH_TABLE_CATEGORIES | {
     "battle_text",  # Emerald battle messages with \\00/\\0F/\\34 runtime variables
 }
 
@@ -159,6 +167,14 @@ def _is_placeholder_table_text(text: str) -> bool:
     if set(stripped) <= {"?", " ", "-"}:
         return True
     return False
+
+
+def _fit_korean_table_entry(entry: dict, text: str) -> str:
+    category = entry.get("category", "")
+    byte_length = int(entry.get("byte_length") or 0)
+    if category in FIXED_WIDTH_TABLE_CATEGORIES and byte_length > 0:
+        return fit_korean_fixed_text(text, byte_length, category)
+    return text
 
 
 def _postprocess_fd_macros(json_path: Path):
@@ -297,14 +313,22 @@ class TranslationEngine:
                 continue
             # Try glossary lookup
             zh = self.glossary.lookup(original)
-            if zh:
+            if zh and self.config.target_lang == "ko":
+                entry["translated"] = _fit_korean_table_entry(entry, zh)
+                continue
+            elif zh:
                 ok, bad = self.charmap.can_encode(zh)
                 if ok:
                     entry["translated"] = zh
                     continue
             # Descriptions, map names without glossary match, and battle text:
             # defer to batch LLM call instead of one-by-one to avoid 500+ API calls
-            if "description" in category or (category == "map_names" and not zh) or category == "battle_text":
+            if (
+                self.config.target_lang == "ko"
+                or "description" in category
+                or (category == "map_names" and not zh)
+                or category == "battle_text"
+            ):
                 needs_llm.append(entry)
             elif zh:
                 entry["translated"] = zh
@@ -367,7 +391,10 @@ class TranslationEngine:
 
             for (entry, _, codes), result in zip(chunk, results):
                 clean = _strip_llm_newlines(result)
-                entry["translated"] = restore(clean, codes)
+                translated = restore(clean, codes)
+                if self.config.target_lang == "ko":
+                    translated = _fit_korean_table_entry(entry, translated)
+                entry["translated"] = translated
 
     def _translate_free_batch(self, batch: list[dict]):
         """Translate a batch of free text entries via LLM."""
@@ -376,6 +403,9 @@ class TranslationEngine:
         for entry in batch:
             entry_id = entry.get("id", "")
             original = entry.get("original", "").strip('"')
+            if entry.get("category") == "scripts" and not is_real_text(original):
+                entry["translated"] = original
+                continue
             if (self.config.target_lang == "zh-Hans" and
                 original in _TERM_OVERRIDES):
                 entry["translated"] = _TERM_OVERRIDES[original]
@@ -416,6 +446,11 @@ class TranslationEngine:
         for i, entry in enumerate(remaining):
             clean = _strip_llm_newlines(results[i])
             translated = restore(clean, codes_list[i])
+            if self.config.target_lang == "ko":
+                translated = _fit_korean_table_entry(entry, translated)
+                if entry.get("category", "") in FIXED_WIDTH_TABLE_CATEGORIES:
+                    entry["translated"] = translated
+                    continue
             entry["translated"] = wrap_text(translated, target_lang=self.config.target_lang)
 
     def _format_glossary(self, text: str) -> str:

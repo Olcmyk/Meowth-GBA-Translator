@@ -57,6 +57,8 @@ Core rules:
 6. Return only the translation, with no explanations, numbering, or notes.
 7. If the input contains no translatable content, return it unchanged.
 8. Do not add line breaks unless the original has paragraph breaks or protected placeholders.
+9. Translate the entire game text surface: dialogue, menus, battle messages, item descriptions, map names, trainer text, system messages, and labels. The glossary is only terminology support, not the translation scope.
+10. Do not leave English unchanged unless it is a control code, placeholder, brand-style acronym, or genuinely untranslatable debug/garbage text.
 
 Terminology glossary:
 {glossary}""",
