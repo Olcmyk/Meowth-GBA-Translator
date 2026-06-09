@@ -6,7 +6,7 @@ import json
 import click
 
 from .core import TranslationCallbacks, TranslationConfig, TranslationEngine
-from .korean_font import default_korean_font_zip, generate_korean_font_assets
+from .korean_font import default_korean_font_zip, generate_korean_font_assets, render_font_preview
 from .languages import validate_language
 from .pipeline import Pipeline
 from .translator import PROVIDER_PRESETS
@@ -213,9 +213,11 @@ def full(rom_path, output_dir, work_dir, source, target,
               help="Path to Galmuri-v2.40.3.zip")
 @click.option("--translations", default=None, type=click.Path(exists=True),
               help="Optional translated texts JSON to prioritize glyphs")
+@click.option("--preview", default=None,
+              help="Optional PNG path for a generated glyph preview")
 @click.option("-o", "--output-dir", default="work/korean_font_assets",
               help="Directory for generated Korean font assets")
-def prepare_ko_font(font_zip, translations, output_dir):
+def prepare_ko_font(font_zip, translations, preview, output_dir):
     """Generate Korean charmap and font binaries from Galmuri."""
     entries = None
     if translations:
@@ -234,6 +236,9 @@ def prepare_ko_font(font_zip, translations, output_dir):
         f"Generated Korean font assets: {result.glyph_count}/"
         f"{result.capacity} glyphs -> {result.output_dir}"
     )
+    if preview:
+        preview_path = render_font_preview(result.output_dir, Path(preview))
+        click.echo(f"Rendered glyph preview: {preview_path}")
 
 
 if __name__ == "__main__":

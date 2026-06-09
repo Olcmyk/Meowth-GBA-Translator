@@ -225,6 +225,7 @@ def generate_korean_font_assets(
     normal_punct_path.write_bytes(_build_punctuation_bin(normal_font, NORMAL_SIZE, NORMAL_GLYPH_SIZE))
     small_punct_path.write_bytes(_build_punctuation_bin(small_font, SMALL_SIZE, SMALL_GLYPH_SIZE))
     charmap_path.write_text(_build_charmap(chars), encoding="utf-8")
+    _copy_galmuri_license(font_zip_path, output_dir)
 
     summary = {
         "glyph_count": len(chars),
@@ -248,6 +249,55 @@ def generate_korean_font_assets(
         glyph_count=len(chars),
         capacity=MAX_KOREAN_GLYPHS,
     )
+
+
+def render_font_preview(
+    assets_dir: Path,
+    output_path: Path,
+    max_glyphs: int = 256,
+    columns: int = 16,
+    scale: int = 4,
+) -> Path:
+    """Render a PNG preview of generated 11x11 Korean glyphs."""
+    try:
+        from PIL import Image, ImageDraw
+    except ImportError as exc:
+        raise RuntimeError("Pillow is required to render font previews") from exc
+
+    assets_dir = Path(assets_dir)
+    output_path = Path(output_path)
+    charmap = _read_generated_chars(assets_dir / "PMRSEFRLG_charmap.txt")[:max_glyphs]
+    font_data = (assets_dir / "gba_chs_font_11x11.bin").read_bytes()
+
+    cell_w = (NORMAL_SIZE[0] + 6) * scale
+    cell_h = (NORMAL_SIZE[1] + 10) * scale
+    rows = max(1, (len(charmap) + columns - 1) // columns)
+    image = Image.new("RGB", (columns * cell_w, rows * cell_h), "white")
+    draw = ImageDraw.Draw(image)
+
+    for idx, ch in enumerate(charmap):
+        x0 = (idx % columns) * cell_w
+        y0 = (idx // columns) * cell_h
+        glyph = font_data[idx * NORMAL_GLYPH_SIZE : (idx + 1) * NORMAL_GLYPH_SIZE]
+        bitmap = _unpack_bitmap(glyph, *NORMAL_SIZE)
+        draw.rectangle([x0, y0, x0 + NORMAL_SIZE[0] * scale + 1, y0 + NORMAL_SIZE[1] * scale + 1], outline=(200, 200, 200))
+        for y, row in enumerate(bitmap):
+            for x, bit in enumerate(row):
+                if bit:
+                    draw.rectangle(
+                        [
+                            x0 + x * scale,
+                            y0 + y * scale,
+                            x0 + (x + 1) * scale - 1,
+                            y0 + (y + 1) * scale - 1,
+                        ],
+                        fill="black",
+                    )
+        draw.text((x0, y0 + (NORMAL_SIZE[1] + 1) * scale), f"U+{ord(ch):04X}", fill=(80, 80, 80))
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    image.save(output_path)
+    return output_path
 
 
 def prepare_korean_font_patch(
@@ -293,6 +343,9 @@ def install_korean_assets(assets_dir: Path, patch_root: Path, game: str) -> None
         assets_dir / "gba_chs_punctuation_9x9.bin",
         font_dir / "gba_chs_punctuation_9x9.bin",
     )
+    license_path = assets_dir / "Galmuri-OFL-LICENSE.txt"
+    if license_path.exists():
+        shutil.copy2(license_path, patch_root / "Galmuri-OFL-LICENSE.txt")
 
 
 def _build_font_bin(font: BdfFont, chars: list[str], size: tuple[int, int], glyph_size: int) -> bytes:
@@ -325,6 +378,14 @@ def _pack_bitmap(bitmap: list[list[int]], glyph_size: int) -> bytes:
     return bytes(data[:glyph_size])
 
 
+def _unpack_bitmap(data: bytes, width: int, height: int) -> list[list[int]]:
+    bits: list[int] = []
+    for byte in data:
+        for shift in range(7, -1, -1):
+            bits.append((byte >> shift) & 1)
+    return [bits[i * width : (i + 1) * width] for i in range(height)]
+
+
 def _build_charmap(chars: list[str]) -> str:
     base_path = get_resource_path("Pokemon_GBA_Font_Patch/pokeFRLG/PMRSEFRLG_charmap.txt")
     lines: list[str] = []
@@ -350,6 +411,30 @@ def _build_charmap(chars: list[str]) -> str:
         lines.append(f"{code:04X}={ch}")
 
     return "\n".join(lines) + "\n"
+
+
+def _read_generated_chars(charmap_path: Path) -> list[str]:
+    chars: list[str] = []
+    for raw in charmap_path.read_text(encoding="utf-8").splitlines():
+        if "=" not in raw:
+            continue
+        hex_part, ch = raw.split("=", 1)
+        try:
+            code = int(hex_part, 16)
+        except ValueError:
+            continue
+        if code >= 0x0100 and len(ch) == 1:
+            chars.append(ch)
+    return chars
+
+
+def _copy_galmuri_license(font_zip_path: Path, output_dir: Path) -> None:
+    with zipfile.ZipFile(font_zip_path) as zf:
+        try:
+            license_text = zf.read("LICENSE.txt").decode("utf-8")
+        except KeyError:
+            return
+    (output_dir / "Galmuri-OFL-LICENSE.txt").write_text(license_text, encoding="utf-8")
 
 
 def _korean_codes() -> list[int]:

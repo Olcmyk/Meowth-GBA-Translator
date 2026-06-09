@@ -34,6 +34,7 @@ REM Pre-build glossary JSON files
 echo [3/5] Building glossary cache...
 mkdir resources 2>nul
 python -c "from meowth.glossary import Glossary; import json; from pathlib import Path; target='ko'; Path('resources').joinpath(f'glossary_en_{target}.json').write_text(json.dumps({'source_to_target': Glossary(source_lang='en', target_lang=target).source_to_target}, ensure_ascii=False, indent=2), encoding='utf-8'); print(f'Generated glossary_en_{target}.json')"
+python -c "import os, zipfile; from pathlib import Path; p=os.environ.get('MEOWTH_KOREAN_FONT_ZIP') or str(Path.home()/'Downloads'/'Galmuri-v2.40.3.zip'); z=Path(p); out=Path('resources')/'Galmuri-OFL-LICENSE.txt'; (out.write_text(zipfile.ZipFile(z).read('LICENSE.txt').decode('utf-8'), encoding='utf-8') or print(f'Extracted {out}')) if z.exists() else print('Galmuri ZIP not found; skipping Galmuri license extraction')"
 echo Done.
 echo.
 

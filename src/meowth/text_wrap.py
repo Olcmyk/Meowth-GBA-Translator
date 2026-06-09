@@ -54,6 +54,8 @@ _TOKEN_RE = re.compile(
     r"|\\[plnr]"
     r"|\[[a-zA-Z_]\w*\]"
     r"|" + "|".join(re.escape(w) for w in sorted(_COMPOUNDS, key=len, reverse=True))
+    + r"|[가-힣ㄱ-ㅎㅏ-ㅣ]+"
+    r"|[ \t]+"
     + r"|[A-Za-z0-9]+"
     r"|.",
     re.DOTALL,
@@ -167,15 +169,28 @@ def _wrap_to_lines(text: str, line_width: int) -> list[str]:
     for i, tok in enumerate(tokens):
         w = _token_width(tok)
 
-        if w > 0 and line_pos > 0 and line_pos + w > line_width:
-            if _can_break_before(tokens, i):
+        if tok.isspace():
+            if line_pos == 0:
+                continue
+            if line_pos + w > line_width:
                 lines.append([])
                 line_pos = 0
+                continue
+
+        if w > 0 and line_pos > 0 and line_pos + w > line_width:
+            if _can_break_before(tokens, i):
+                while lines[-1] and lines[-1][-1].isspace():
+                    removed = lines[-1].pop()
+                    line_pos -= _token_width(removed)
+                lines.append([])
+                line_pos = 0
+                if tok.isspace():
+                    continue
 
         lines[-1].append(tok)
         line_pos += w
 
-    return ["".join(line) for line in lines if line]
+    return ["".join(line).strip() for line in lines if line]
 
 
 def _distribute_lines(lines: list[str], lines_per_box: int) -> str:

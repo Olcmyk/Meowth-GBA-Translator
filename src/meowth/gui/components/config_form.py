@@ -6,6 +6,7 @@ from tkinter import filedialog
 import customtkinter as ctk
 
 from ...core import TranslationConfig
+from ...korean_font import default_korean_font_zip
 from ...translator import PROVIDER_PRESETS
 
 # Language display name -> language code (must match languages.py)
@@ -49,6 +50,21 @@ class ConfigForm(ctk.CTkFrame):
         self.output_entry.pack(side="left", fill="x", expand=True, padx=(0, 8))
         ctk.CTkButton(
             output_row, text="Browse", width=80, height=30, command=self._browse_output
+        ).pack(side="right")
+
+        # --- Row 1.75: Korean Font ZIP ---
+        ctk.CTkLabel(inner, text="Korean Font ZIP", font=("", 12, "bold")).pack(anchor="w")
+        font_row = ctk.CTkFrame(inner, fg_color="transparent")
+        font_row.pack(fill="x", pady=(2, 8))
+        self.font_entry = ctk.CTkEntry(
+            font_row, placeholder_text="Select Galmuri-v2.40.3.zip...", height=30
+        )
+        default_font = default_korean_font_zip()
+        if default_font:
+            self.font_entry.insert(0, str(default_font))
+        self.font_entry.pack(side="left", fill="x", expand=True, padx=(0, 8))
+        ctk.CTkButton(
+            font_row, text="Browse", width=80, height=30, command=self._browse_font
         ).pack(side="right")
 
         # --- Row 2: Languages ---
@@ -152,6 +168,16 @@ class ConfigForm(ctk.CTkFrame):
             self.output_entry.delete(0, "end")
             self.output_entry.insert(0, dirname)
 
+    def _browse_font(self):
+        """Open file dialog to select the Galmuri font archive."""
+        filename = filedialog.askopenfilename(
+            title="Select Galmuri Font ZIP",
+            filetypes=[("ZIP files", "*.zip"), ("All files", "*.*")],
+        )
+        if filename:
+            self.font_entry.delete(0, "end")
+            self.font_entry.insert(0, filename)
+
     def _toggle_advanced(self):
         """Toggle advanced settings visibility."""
         if self.advanced_visible:
@@ -190,6 +216,7 @@ class ConfigForm(ctk.CTkFrame):
             rom_path=Path(self.rom_entry.get()) if self.rom_entry.get() else None,
             output_dir=output_dir,
             work_dir=work_dir,
+            korean_font_zip=Path(self.font_entry.get()) if self.font_entry.get() else default_korean_font_zip(),
         )
 
     def validate(self) -> tuple[bool, str]:
@@ -201,4 +228,11 @@ class ConfigForm(ctk.CTkFrame):
             return False, f"ROM file not found: {rom_path}"
         if not self.api_key_entry.get().strip():
             return False, "Please enter your API key"
+        target = self._lang_name_to_code(self.target_lang.get())
+        if target == "ko":
+            font_path = self.font_entry.get().strip()
+            if not font_path:
+                return False, "Please select Galmuri-v2.40.3.zip"
+            if not Path(font_path).exists():
+                return False, f"Korean font ZIP not found: {font_path}"
         return True, ""

@@ -42,20 +42,32 @@ class RomWriter:
         self.target_lang = target_lang
         self.FONT_BOUNDARY = self._FONT_BOUNDARIES.get(game, 0x01FD3000)
         self.write_offset = self.EXPANSION_START  # updated in inject()
+        self.write_limit = self.FONT_BOUNDARY
 
     @staticmethod
-    def _find_free_space(rom: bytes, boundary: int) -> int:
-        """Find the start of the largest contiguous 0xFF block before boundary.
+    def _find_free_space(rom: bytes, boundary: int) -> tuple[int, int]:
+        """Find the largest contiguous 0xFF block before boundary.
 
-        Scans backwards from *boundary* to locate free space that ROM hacks
-        haven't used.  Returns the offset of the first byte of that block.
+        Returns (start, end). The old implementation only used trailing free
+        space adjacent to the font area; many 32MB hacks have usable gaps
+        earlier in the expansion area, so scan for the largest safe block.
         """
         end = min(boundary, len(rom))
-        pos = end - 1
-        while pos >= 0 and rom[pos] == 0xFF:
-            pos -= 1
-        # pos is now the last non-FF byte; free space starts right after
-        return pos + 1
+        start = min(RomWriter.EXPANSION_START, end)
+        best_start = end
+        best_end = end
+        pos = start
+        while pos < end:
+            if rom[pos] != 0xFF:
+                pos += 1
+                continue
+            block_start = pos
+            while pos < end and rom[pos] == 0xFF:
+                pos += 1
+            if pos - block_start > best_end - best_start:
+                best_start = block_start
+                best_end = pos
+        return best_start, best_end
 
     def inject(
         self,
@@ -81,11 +93,12 @@ class RomWriter:
             rom = bytearray(f.read())
 
         # Auto-detect safe expansion start (avoid overwriting hack data)
-        free_start = self._find_free_space(rom, self.FONT_BOUNDARY)
-        available = self.FONT_BOUNDARY - free_start
+        free_start, free_end = self._find_free_space(rom, self.FONT_BOUNDARY)
+        available = free_end - free_start
         if available < self._MIN_FREE_BLOCK:
             print(f"Warning: only {available:,} bytes free before font boundary")
         self.write_offset = free_start
+        self.write_limit = free_end
         print(f"Expansion region start: 0x{free_start:08X} ({available:,} bytes available)")
 
         # Load translations
@@ -177,8 +190,8 @@ class RomWriter:
     ) -> None:
         """Write text to expansion area and update pointers."""
         # Check boundary
-        if self.write_offset + len(encoded) >= self.FONT_BOUNDARY:
-            print(f"Warning: Approaching font boundary at 0x{self.write_offset:X}")
+        if self.write_offset + len(encoded) >= self.write_limit:
+            print(f"Warning: Approaching free-space limit at 0x{self.write_offset:X}")
             stats["errors"] += 1
             return
 
@@ -258,8 +271,8 @@ class RomWriter:
         self, rom: bytearray, encoded: bytes, pointer_sources: list
     ) -> None:
         """Write text to expansion area and update pointers (no stats)."""
-        if self.write_offset + len(encoded) >= self.FONT_BOUNDARY:
-            raise RuntimeError(f"Approaching font boundary at 0x{self.write_offset:X}")
+        if self.write_offset + len(encoded) >= self.write_limit:
+            raise RuntimeError(f"Approaching free-space limit at 0x{self.write_offset:X}")
         if self.write_offset + len(encoded) > len(rom):
             raise RuntimeError("ROM too small for relocated text")
 
@@ -370,11 +383,12 @@ class RomWriter:
         Returns (rom, stats).
         """
         # Auto-detect safe expansion start
-        free_start = self._find_free_space(rom, self.FONT_BOUNDARY)
-        available = self.FONT_BOUNDARY - free_start
+        free_start, free_end = self._find_free_space(rom, self.FONT_BOUNDARY)
+        available = free_end - free_start
         if available < self._MIN_FREE_BLOCK:
             print(f"Warning: only {available:,} bytes free before font boundary")
         self.write_offset = free_start
+        self.write_limit = free_end
         print(f"Expansion region start: 0x{free_start:08X} ({available:,} bytes available)")
 
         stats = {

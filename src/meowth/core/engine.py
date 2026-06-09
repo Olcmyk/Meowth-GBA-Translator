@@ -530,16 +530,23 @@ class TranslationEngine:
         # MeowthBridge (via HMA) needs resources/ to exist in its CWD.
         # Find the actual resources directory and symlink/copy it into cwd.
         resources_src = get_resource_path("resources")
+        if not resources_src.exists():
+            dev_resources = get_resource_path("HexManiacAdvance/src/HexManiac.Core/Models/Code")
+            if dev_resources.exists():
+                resources_src = dev_resources
         resources_dst = cwd / "resources"
         if resources_src.exists() and not resources_dst.exists():
             try:
                 os.symlink(resources_src, resources_dst)
             except (OSError, NotImplementedError):
                 _shutil.copytree(str(resources_src), str(resources_dst))
+        resources_dst.mkdir(exist_ok=True)
 
         result = subprocess.run(
             [str(exe), "extract", str(rom_abs)],
             capture_output=True, text=True,
+            encoding="utf-8",
+            errors="replace",
             cwd=str(cwd),
         )
         if result.returncode != 0:
