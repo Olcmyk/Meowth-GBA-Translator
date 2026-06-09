@@ -42,6 +42,7 @@ FIXED_WIDTH_TABLE_CATEGORIES = {
 }
 
 DESCRIPTION_LINE_WIDTH = 28
+TRANSLATION_REUSE_SCHEMA = 2
 
 # Table categories (routed through _translate_table instead of LLM free-text batches)
 TABLE_CATEGORIES = FIXED_WIDTH_TABLE_CATEGORIES | {
@@ -247,9 +248,12 @@ def _seed_existing_translations(data: dict, existing_path: Path, target_lang: st
     if not existing_path.exists():
         return 0
     try:
-        existing = convert_format(json.loads(existing_path.read_text(encoding="utf-8")))
+        raw_existing = json.loads(existing_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return 0
+    if raw_existing.get("_meowth_translation_reuse_schema") != TRANSLATION_REUSE_SCHEMA:
+        return 0
+    existing = convert_format(raw_existing)
 
     by_key: dict[tuple, dict] = {}
     for old_entry in _all_entries(existing):
@@ -508,6 +512,7 @@ class TranslationEngine:
         if self.config.target_lang == "ko":
             _assert_korean_translation_progress(data)
 
+        data["_meowth_translation_reuse_schema"] = TRANSLATION_REUSE_SCHEMA
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(
             json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
