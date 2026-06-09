@@ -243,6 +243,50 @@ def _assert_korean_translation_progress(data: dict) -> None:
         )
 
 
+def _hangul_translated_entries(entries: list[dict]) -> list[dict]:
+    result = []
+    for entry in entries:
+        original = entry.get("original", "").strip('"')
+        translated = entry.get("translated", "").strip('"')
+        if translated and translated != original and _contains_hangul(translated):
+            result.append(entry)
+    return result
+
+
+def _assert_korean_rom_injection(
+    entries: list[dict],
+    rom: bytearray,
+    stats: dict,
+    charmap: Charmap,
+) -> None:
+    hangul_entries = _hangul_translated_entries(entries)
+    if not hangul_entries:
+        raise RuntimeError(
+            "Korean build has no Hangul translated entries to inject. "
+            "Check the translation JSON before building."
+        )
+
+    written = stats.get("in_place", 0) + stats.get("relocated", 0)
+    if written <= 0:
+        raise RuntimeError(
+            "Korean build injected zero translated entries. The ROM would stay "
+            "English, so the build was stopped."
+        )
+
+    rom_bytes = bytes(rom)
+    for entry in hangul_entries[:100]:
+        translated = entry.get("translated", "").strip('"')
+        encoded = charmap.encode(translated).rstrip(b"\xFF")
+        if encoded and encoded in rom_bytes:
+            return
+
+    raise RuntimeError(
+        "Korean translated text was generated, but no encoded Hangul text was "
+        "found in the output ROM after injection. The writer path is not "
+        "actually applying Korean text."
+    )
+
+
 def _postprocess_fd_macros(json_path: Path):
     """Replace HMA's raw FD escape sequences with named macros."""
     _HMA_KNOWN = {0x01, 0x02, 0x03, 0x04, 0x06}
@@ -573,7 +617,10 @@ class TranslationEngine:
 
         data = json.loads(translations_path.read_text(encoding="utf-8"))
         data = convert_format(data)
+        if self.config.target_lang == "ko":
+            _assert_korean_translation_progress(data)
         output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.unlink(missing_ok=True)
 
         # Collect all entries before patching so Korean builds can subset fonts
         # to exactly the glyphs that may be injected into the ROM.
@@ -642,6 +689,8 @@ class TranslationEngine:
         # Inject texts
         self._log("info", Messages.INJECTING_TEXTS.format(count=len(all_entries)))
         rom, stats = writer.inject_texts(rom, all_entries)
+        if self.config.target_lang == "ko":
+            _assert_korean_rom_injection(all_entries, rom, stats, self.charmap)
         self._log("info", Messages.INJECTION_STATS.format(
             in_place=stats['in_place'],
             relocated=stats['relocated'],
