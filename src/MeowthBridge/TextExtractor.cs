@@ -28,6 +28,7 @@ public class TextExtractor
         // Phase 1: 提取表格文本（100% 准确，HMA 已识别表格结构）
         Console.Error.WriteLine("Phase 1: 提取表格文本...");
         ExtractTableTexts(entries, extractedAddresses, entriesByAddress, ref id);
+        ExtractSequentialAbilityTexts(entries, extractedAddresses, entriesByAddress, ref id);
         Console.Error.WriteLine($"  表格文本: {entries.Count} 条");
 
         // Phase 2: 扫描 loadpointer 指令，构建安全的指针源映射
@@ -294,6 +295,126 @@ public class TextExtractor
         if (string.IsNullOrEmpty(text) || text == "\"\"") return false;
         var clean = text.Trim('"').Trim();
         return clean.Length > 0;
+    }
+
+    private void ExtractSequentialAbilityTexts(
+        List<TextEntry> entries,
+        HashSet<int> extractedAddresses,
+        Dictionary<int, TextEntry> entriesByAddress,
+        ref int id)
+    {
+        ExtractSequentialPcsStrings(
+            entries, extractedAddresses, entriesByAddress, ref id,
+            "data.abilities.names", "ability_names", "ability_name", "name",
+            LooksLikeAbilityName, maxCount: 512);
+        ExtractSequentialPcsStrings(
+            entries, extractedAddresses, entriesByAddress, ref id,
+            "data.abilities.descriptions", "ability_descriptions", "ability_description", "description",
+            LooksLikeAbilityDescription, maxCount: 512);
+    }
+
+    private void ExtractSequentialPcsStrings(
+        List<TextEntry> entries,
+        HashSet<int> extractedAddresses,
+        Dictionary<int, TextEntry> entriesByAddress,
+        ref int id,
+        string anchorName,
+        string category,
+        string idPrefix,
+        string tableField,
+        Func<string, bool> predicate,
+        int maxCount)
+    {
+        var pos = _model.GetAddressFromAnchor(new NoDataChangeDeltaModel(), -1, anchorName);
+        if (pos < 0) return;
+
+        for (int index = 0; index < maxCount && pos < _model.Count; index++)
+        {
+            while (pos < _model.Count && _model[pos] == 0xFF)
+                pos++;
+            if (pos >= _model.Count) break;
+
+            var textLength = ValidateSequentialPcsText(pos);
+            if (textLength < 2) break;
+
+            var text = _model.TextConverter.Convert(_model, pos, textLength);
+            if (!predicate(text)) break;
+
+            AddOrMergeEntry(
+                entries, extractedAddresses, entriesByAddress, ref id,
+                idPrefix, category, pos, text, textLength, false, null,
+                anchorName, index, tableField);
+
+            pos += textLength;
+        }
+    }
+
+    private static bool LooksLikeAbilityName(string text)
+    {
+        if (string.IsNullOrEmpty(text) || text == "\"\"") return false;
+        var clean = text.Trim('"').Trim();
+        if (clean == "-------") return true;
+        if (clean == "-") return true;
+        if (clean.Length < 2 || clean.Length > 32) return false;
+        if (clean.Contains('\r') || clean.Contains('\n') || clean.Contains('\\') || clean.Contains('['))
+            return false;
+        return clean.All(ch =>
+            char.IsLetter(ch) || ch == ' ' || ch == '-' || ch == '\'' || ch == '.' || ch == '0' || ch == '1' || ch == '2');
+    }
+
+    private static bool LooksLikeAbilityDescription(string text)
+    {
+        if (string.IsNullOrEmpty(text) || text == "\"\"") return false;
+        var clean = text.Trim('"').Trim();
+        if (clean.Length < 8 || clean.Length > 96) return false;
+        if (clean.Contains('\r') || clean.Contains('\n') || clean.Contains('\\') || clean.Contains('['))
+            return false;
+        return clean.Count(char.IsLetter) >= 4;
+    }
+
+    private int ValidateSequentialPcsText(int address)
+    {
+        if (address < 0 || address >= _model.Count) return 0;
+
+        const int MAX_LENGTH = 128;
+        int printable = 0;
+
+        for (int i = 0; i < MAX_LENGTH && address + i < _model.Count; i++)
+        {
+            byte b = _model[address + i];
+            if (b == 0xFF)
+                return printable > 0 ? i + 1 : 0;
+
+            if ((b >= 0xBB && b <= 0xD4) || (b >= 0xD5 && b <= 0xEE) || b == 0x1B)
+            {
+                printable++;
+                continue;
+            }
+            if (b == 0x00 || (b >= 0xA1 && b <= 0xBA))
+            {
+                printable++;
+                continue;
+            }
+            if (b == 0xFA || b == 0xFB || b == 0xFE)
+            {
+                printable++;
+                continue;
+            }
+            if (b == 0xFC && address + i + 1 < _model.Count)
+            {
+                i++;
+                continue;
+            }
+            if (b == 0xFD && address + i + 1 < _model.Count)
+            {
+                i++;
+                continue;
+            }
+
+            return 0;
+        }
+
+        return 0;
     }
 
     private static string InferBaseCategory(string tableName)
