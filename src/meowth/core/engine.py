@@ -218,7 +218,6 @@ def _all_entries(data: dict) -> list[dict]:
 def _entry_reuse_keys(entry: dict) -> list[tuple]:
     original = entry.get("original", "").strip('"')
     return [
-        ("id", entry.get("id", "")),
         (
             "table",
             entry.get("category", ""),
