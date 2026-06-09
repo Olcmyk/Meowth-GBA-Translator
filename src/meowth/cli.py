@@ -6,6 +6,7 @@ import json
 import click
 
 from .core import TranslationCallbacks, TranslationConfig, TranslationEngine
+from .core.config import DEFAULT_BATCH_SIZE, DEFAULT_MAX_WORKERS
 from .korean_font import default_korean_font_zip, generate_korean_font_assets, render_font_preview
 from .languages import validate_language
 from .pipeline import Pipeline
@@ -127,8 +128,8 @@ def extract(rom_path, output, source, target):
 @main.command()
 @click.argument("texts_json", type=click.Path(exists=True))
 @click.option("-o", "--output", default="work/texts_translated.json")
-@click.option("--batch-size", default=30, help="Texts per LLM batch")
-@click.option("--workers", default=10, help="Parallel translation threads")
+@click.option("--batch-size", default=DEFAULT_BATCH_SIZE, help="Texts per LLM batch")
+@click.option("--workers", default=DEFAULT_MAX_WORKERS, help="Parallel translation threads")
 @click.option("--source", default="en", help="Source language code (default: from config or en)")
 @click.option("--target", default="ko", help="Target language code (default: from config or ko)")
 @add_provider_options

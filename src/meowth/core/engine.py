@@ -1,6 +1,7 @@
 """Core translation engine - refactored from Pipeline with callback support."""
 
 import json
+import re
 import subprocess
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -169,12 +170,37 @@ def _is_placeholder_table_text(text: str) -> bool:
     return False
 
 
+def _has_translatable_text(protected: str) -> bool:
+    """Return True if protected text still has content worth sending to LLM."""
+    cleaned = re.sub(r"\{C\d+\}", "", protected)
+    return sum(c.isalpha() for c in cleaned) >= 2
+
+
 def _fit_korean_table_entry(entry: dict, text: str) -> str:
     category = entry.get("category", "")
     byte_length = int(entry.get("byte_length") or 0)
     if category in FIXED_WIDTH_TABLE_CATEGORIES and byte_length > 0:
         return fit_korean_fixed_text(text, byte_length, category)
     return text
+
+
+def _dedupe_free_texts(entries: list[dict]) -> tuple[list[dict], list[list[dict]]]:
+    groups: dict[tuple[str, str], list[dict]] = {}
+    for entry in entries:
+        key = (entry.get("category", ""), entry.get("original", "").strip('"'))
+        groups.setdefault(key, []).append(entry)
+    unique = [group[0] for group in groups.values()]
+    duplicates = [group for group in groups.values() if len(group) > 1]
+    return unique, duplicates
+
+
+def _copy_duplicate_translations(duplicates: list[list[dict]]) -> None:
+    for group in duplicates:
+        translated = group[0].get("translated")
+        if translated is None:
+            continue
+        for entry in group[1:]:
+            entry["translated"] = translated
 
 
 def _postprocess_fd_macros(json_path: Path):
@@ -250,11 +276,18 @@ class TranslationEngine:
         for table in data["tables"]:
             self._translate_table(table)
 
-        # Translate free texts in parallel batches
+        # Translate only unique free-text entries. The entries are still the
+        # original dict objects, so JSON output order remains stable; duplicate
+        # translations are copied back after the worker batches complete.
         free_texts = data["free_texts"]
+        unique_free_texts, duplicate_free_texts = _dedupe_free_texts(free_texts)
+        free_texts_to_process = sorted(
+            unique_free_texts,
+            key=lambda e: e.get("original", "").strip('"'),
+        )
         batches = [
-            free_texts[i : i + self.config.batch_size]
-            for i in range(0, len(free_texts), self.config.batch_size)
+            free_texts_to_process[i : i + self.config.batch_size]
+            for i in range(0, len(free_texts_to_process), self.config.batch_size)
         ]
         total = len(batches)
         self._log("info", Messages.BATCH_PROGRESS.format(
@@ -284,6 +317,8 @@ class TranslationEngine:
                     print(f"  e.g. {sample['original']!r} → {sample['translated']!r}")
                 self.callbacks.on_progress("translate", done_count, total,
                     f"Batch {idx + 1} completed")
+
+        _copy_duplicate_translations(duplicate_free_texts)
 
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(
@@ -355,16 +390,13 @@ class TranslationEngine:
         translate), then sends the rest in batches of batch_size, same as
         free-text processing.
         """
-        import re
-
         # Separate: entries with real text vs pure control-code entries
         to_translate: list[tuple[dict, str, list]] = []  # (entry, protected, codes)
         for entry in entries:
             original = entry["original"].strip('"')
             protected, codes = protect(original)
             # Count actual alphabetic letters after stripping {C0}-style placeholders
-            cleaned = re.sub(r"\{C\d+\}", "", protected)
-            if sum(c.isalpha() for c in cleaned) >= 2:
+            if _has_translatable_text(protected):
                 to_translate.append((entry, protected, codes))
             else:
                 # Pure control codes – keep original, nothing to translate
@@ -373,28 +405,36 @@ class TranslationEngine:
         if not to_translate:
             return
 
-        # Batch translate in groups of batch_size (same as free texts)
+        grouped: dict[str, list[tuple[dict, list]]] = {}
+        for entry, protected, codes in to_translate:
+            grouped.setdefault(protected, []).append((entry, codes))
+
+        # Batch translate unique protected strings in groups of batch_size.
         batch_size = self.config.batch_size
-        for i in range(0, len(to_translate), batch_size):
-            chunk = to_translate[i : i + batch_size]
-            protected_list = [p for _, p, _ in chunk]
-            all_text = " ".join(e["original"] for e, _, _ in chunk)
+        protected_all = list(grouped)
+        for i in range(0, len(protected_all), batch_size):
+            protected_list = protected_all[i : i + batch_size]
+            all_text = " ".join(
+                grouped[protected][0][0]["original"] for protected in protected_list
+            )
             glossary_ctx = self._format_glossary(all_text)
 
             try:
                 results = self.translator.translate_batch(protected_list, glossary_ctx)
             except Exception as e:
                 print(f"[Table batch LLM failed: {e}, keeping originals]")
-                for entry, _, _ in chunk:
-                    entry["translated"] = entry["original"].strip('"')
+                for protected in protected_list:
+                    for entry, _ in grouped[protected]:
+                        entry["translated"] = entry["original"].strip('"')
                 continue
 
-            for (entry, _, codes), result in zip(chunk, results):
+            for protected, result in zip(protected_list, results):
                 clean = _strip_llm_newlines(result)
-                translated = restore(clean, codes)
-                if self.config.target_lang == "ko":
-                    translated = _fit_korean_table_entry(entry, translated)
-                entry["translated"] = translated
+                for entry, codes in grouped[protected]:
+                    translated = restore(clean, codes)
+                    if self.config.target_lang == "ko":
+                        translated = _fit_korean_table_entry(entry, translated)
+                    entry["translated"] = translated
 
     def _translate_free_batch(self, batch: list[dict]):
         """Translate a batch of free text entries via LLM."""
@@ -405,6 +445,11 @@ class TranslationEngine:
             original = entry.get("original", "").strip('"')
             if entry.get("category") == "scripts" and not is_real_text(original):
                 entry["translated"] = original
+                continue
+            term = self.glossary.lookup(original)
+            if term and self.config.target_lang == "ko":
+                translated = _fit_korean_table_entry(entry, term)
+                entry["translated"] = wrap_text(translated, target_lang=self.config.target_lang)
                 continue
             if (self.config.target_lang == "zh-Hans" and
                 original in _TERM_OVERRIDES):
@@ -419,18 +464,25 @@ class TranslationEngine:
         if not remaining:
             return
 
-        originals = [e["original"] for e in remaining]
+        # Protect control codes and collapse duplicates within the batch.
+        grouped: dict[str, list[tuple[dict, list]]] = {}
+        originals_by_key: dict[str, str] = {}
+        for entry in remaining:
+            original = entry["original"]
+            protected, codes = protect(original)
+            if not _has_translatable_text(protected):
+                entry["translated"] = original
+                continue
+            grouped.setdefault(protected, []).append((entry, codes))
+            originals_by_key.setdefault(protected, original)
 
-        # Protect control codes
-        protected_list = []
-        codes_list = []
-        for text in originals:
-            protected, codes = protect(text)
-            protected_list.append(protected)
-            codes_list.append(codes)
+        if not grouped:
+            return
+
+        protected_list = list(grouped)
 
         # Build glossary context
-        all_text = " ".join(originals)
+        all_text = " ".join(originals_by_key.values())
         glossary_ctx = self._format_glossary(all_text)
 
         # Translate
@@ -443,15 +495,16 @@ class TranslationEngine:
             return
 
         # Restore and wrap
-        for i, entry in enumerate(remaining):
-            clean = _strip_llm_newlines(results[i])
-            translated = restore(clean, codes_list[i])
-            if self.config.target_lang == "ko":
-                translated = _fit_korean_table_entry(entry, translated)
-                if entry.get("category", "") in FIXED_WIDTH_TABLE_CATEGORIES:
-                    entry["translated"] = translated
-                    continue
-            entry["translated"] = wrap_text(translated, target_lang=self.config.target_lang)
+        for protected, result in zip(protected_list, results):
+            clean = _strip_llm_newlines(result)
+            for entry, codes in grouped[protected]:
+                translated = restore(clean, codes)
+                if self.config.target_lang == "ko":
+                    translated = _fit_korean_table_entry(entry, translated)
+                    if entry.get("category", "") in FIXED_WIDTH_TABLE_CATEGORIES:
+                        entry["translated"] = translated
+                        continue
+                entry["translated"] = wrap_text(translated, target_lang=self.config.target_lang)
 
     def _format_glossary(self, text: str) -> str:
         terms = self.glossary.get_context_terms(text)

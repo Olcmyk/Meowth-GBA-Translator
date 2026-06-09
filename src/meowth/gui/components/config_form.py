@@ -6,6 +6,7 @@ from tkinter import filedialog
 import customtkinter as ctk
 
 from ...core import TranslationConfig
+from ...core.config import DEFAULT_BATCH_SIZE, DEFAULT_MAX_WORKERS
 from ...korean_font import default_korean_font_zip
 from ...translator import PROVIDER_PRESETS
 
@@ -132,14 +133,14 @@ class ConfigForm(ctk.CTkFrame):
         bf.pack(side="left", fill="x", expand=True, padx=(0, 6))
         ctk.CTkLabel(bf, text="Batch Size:", font=("", 11)).pack(anchor="w")
         self.batch_size = ctk.CTkEntry(bf, height=30)
-        self.batch_size.insert(0, "30")
+        self.batch_size.insert(0, str(DEFAULT_BATCH_SIZE))
         self.batch_size.pack(fill="x", pady=(2, 0))
 
         wf = ctk.CTkFrame(adv_row, fg_color="transparent")
         wf.pack(side="right", fill="x", expand=True, padx=(6, 0))
         ctk.CTkLabel(wf, text="Max Workers:", font=("", 11)).pack(anchor="w")
         self.max_workers = ctk.CTkEntry(wf, height=30)
-        self.max_workers.insert(0, "10")
+        self.max_workers.insert(0, str(DEFAULT_MAX_WORKERS))
         self.max_workers.pack(fill="x", pady=(2, 0))
 
     def _on_provider_change(self, provider_name: str):
@@ -211,8 +212,8 @@ class ConfigForm(ctk.CTkFrame):
             model=self.model_entry.get().strip() or (preset[1] if preset else None),
             api_key_env=preset[2] if preset else None,
             api_key=api_key if api_key else None,
-            batch_size=int(self.batch_size.get()) if self.batch_size.get().isdigit() else 30,
-            max_workers=int(self.max_workers.get()) if self.max_workers.get().isdigit() else 10,
+            batch_size=int(self.batch_size.get()) if self.batch_size.get().isdigit() else DEFAULT_BATCH_SIZE,
+            max_workers=int(self.max_workers.get()) if self.max_workers.get().isdigit() else DEFAULT_MAX_WORKERS,
             rom_path=Path(self.rom_entry.get()) if self.rom_entry.get() else None,
             output_dir=output_dir,
             work_dir=work_dir,

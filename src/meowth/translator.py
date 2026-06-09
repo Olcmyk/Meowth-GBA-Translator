@@ -64,7 +64,7 @@ Terminology glossary:
 {glossary}""",
         "user": """Translate the following Pokemon game text from {source_lang} to Korean.
 Each text is separated by |||. Return translations in the same order, also separated by |||.
-Do not add numbering or extra explanations.
+Return exactly the same number of segments. Do not add numbering or extra explanations.
 
 {texts}""",
     },
@@ -204,6 +204,27 @@ class Translator:
                 encoding="utf-8",
             )
 
+    def _single_text_request(self, system: str, text: str) -> dict:
+        user = self.prompts["user"].replace("{texts}", text)
+        return {
+            "model": self.model,
+            "system": system,
+            "user": user,
+        }
+
+    def _get_single_cached(self, system: str, text: str) -> str | None:
+        return self._get_cached(self._cache_key(self._single_text_request(system, text)))
+
+    def _save_single_cached(self, system: str, text: str, content: str):
+        request_data = self._single_text_request(system, text)
+        self._save_cache(self._cache_key(request_data), request_data, content)
+
+    @staticmethod
+    def _complete_results(results: list[str | None]) -> list[str]:
+        if any(result is None for result in results):
+            raise RuntimeError("Internal translation result merge failed")
+        return [result for result in results if result is not None]
+
     def translate_batch(
         self, texts: list[str], glossary_context: str = ""
     ) -> list[str]:
@@ -213,8 +234,26 @@ class Translator:
         splits into the wrong number of segments, falls back to translating
         each text individually to avoid misalignment.
         """
-        joined = " ||| ".join(texts)
         system = self.prompts["system"].replace("{glossary}", glossary_context or "（无）")
+        cached_results: list[str | None] = []
+        missing_indices: list[int] = []
+        missing_texts: list[str] = []
+        for idx, text in enumerate(texts):
+            cached = self._get_single_cached(system, text)
+            cached_results.append(cached)
+            if cached is None:
+                missing_indices.append(idx)
+                missing_texts.append(text)
+
+        if not missing_texts:
+            return self._complete_results(cached_results)
+
+        grouped_missing: dict[str, list[int]] = {}
+        for idx, text in zip(missing_indices, missing_texts):
+            grouped_missing.setdefault(text, []).append(idx)
+        request_texts = list(grouped_missing)
+
+        joined = " ||| ".join(request_texts)
         user = self.prompts["user"].replace("{texts}", joined)
 
         request_data = {
@@ -227,34 +266,49 @@ class Translator:
         cached = self._get_cached(cache_key)
         if cached is not None:
             parts = [t.strip() for t in cached.split("|||") if t.strip()]
-            if len(parts) == len(texts):
-                return parts
+            if len(parts) == len(request_texts):
+                for text, part in zip(request_texts, parts):
+                    for idx in grouped_missing[text]:
+                        cached_results[idx] = part
+                return self._complete_results(cached_results)
             # Cache had misaligned result — fall through to re-translate
             from .i18n import Messages
-            print(Messages.CACHE_MISMATCH.format(parts=len(parts), texts=len(texts)))
+            print(Messages.CACHE_MISMATCH.format(parts=len(parts), texts=len(request_texts)))
 
         # Call API
         content = self._call_api(system, user)
 
         # Split and check alignment (filter empty strings from trailing |||)
         parts = [t.strip() for t in content.split("|||") if t.strip()]
-        if len(parts) == len(texts):
+        if len(parts) == len(request_texts):
             # Perfect split — cache and return
             has_untranslated = any(
                 self._translation_unchanged(orig, trans)
-                for orig, trans in zip(texts, parts)
+                for orig, trans in zip(request_texts, parts)
             )
             if not has_untranslated:
                 self._save_cache(cache_key, request_data, content)
             else:
                 from .i18n import Messages
                 print(Messages.PARTIAL_UNTRANSLATED)
-            return parts
+            for text, part in zip(request_texts, parts):
+                if (
+                    not self._translation_unchanged(text, part)
+                    or self._can_cache_unchanged(text)
+                ):
+                    self._save_single_cached(system, text, part)
+                for idx in grouped_missing[text]:
+                    cached_results[idx] = part
+            return self._complete_results(cached_results)
 
         # Misaligned — fall back to one-by-one translation
         from .i18n import Messages
-        print(Messages.BATCH_SPLIT_MISMATCH.format(parts=len(parts), texts=len(texts)))
-        return self._translate_individually(texts, glossary_context)
+        print(Messages.BATCH_SPLIT_MISMATCH.format(parts=len(parts), texts=len(request_texts)))
+        translated_missing = self._translate_individually(request_texts, glossary_context)
+        for text, part in zip(request_texts, translated_missing):
+            for idx in grouped_missing[text]:
+                cached_results[idx] = part
+        return self._complete_results(cached_results)
 
     def _call_api(self, system: str, user: str, max_retries: int = 3) -> str:
         """Send a single chat completion request and return the content."""
@@ -311,10 +365,18 @@ class Translator:
                 continue
 
             content = self._call_api(system, user)
-            if not self._translation_unchanged(text, content):
+            if (
+                not self._translation_unchanged(text, content)
+                or self._can_cache_unchanged(text)
+            ):
                 self._save_cache(cache_key, request_data, content)
             results.append(content)
         return results
+
+    def _can_cache_unchanged(self, text: str) -> bool:
+        """Allow caching short labels that are intentionally unchanged."""
+        letters = "".join(c for c in text if c.isascii() and c.isalpha())
+        return 0 < len(letters) <= 3 and letters.upper() == letters
 
     def _translation_unchanged(self, original: str, translated: str) -> bool:
         """Check if the API returned text essentially unchanged (not translated)."""
