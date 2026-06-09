@@ -149,6 +149,18 @@ def _strip_llm_newlines(text: str) -> str:
     return text
 
 
+def _is_placeholder_table_text(text: str) -> bool:
+    """Return True for blank/dummy table values that should stay unchanged."""
+    stripped = text.strip().strip('"')
+    if not stripped:
+        return True
+    if stripped in {"-", "?", "??", "??????", "????????"}:
+        return True
+    if set(stripped) <= {"?", " ", "-"}:
+        return True
+    return False
+
+
 def _postprocess_fd_macros(json_path: Path):
     """Replace HMA's raw FD escape sequences with named macros."""
     _HMA_KNOWN = {0x01, 0x02, 0x03, 0x04, 0x06}
@@ -270,6 +282,9 @@ class TranslationEngine:
 
         for entry in table["entries"]:
             original = entry["original"].strip('"')
+            if _is_placeholder_table_text(original):
+                entry["translated"] = original
+                continue
             # Check term overrides (all games, Chinese only)
             if self.config.target_lang == "zh-Hans" and original in _TERM_OVERRIDES:
                 entry["translated"] = _TERM_OVERRIDES[original]

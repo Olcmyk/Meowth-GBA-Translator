@@ -37,6 +37,25 @@ class RomWriter:
     # Minimum contiguous free block required (bytes)
     _MIN_FREE_BLOCK = 512 * 1024  # 512 KB
 
+    _FIXED_WIDTH_TABLE_CATEGORIES = {
+        "pokemon_names",
+        "move_names",
+        "ability_names",
+        "nature_names",
+        "type_names",
+        "item_names",
+        "trainer_classes",
+        "map_names",
+        "habitat_names",
+        "menu_options",
+        "menu_pc",
+        "menu_pcoptions",
+        "menu_pokemon",
+        "menu_item_storage",
+        "menu_pause",
+        "menu_pokemon_options",
+    }
+
     def __init__(self, charmap: Optional[Charmap] = None, game: str = "firered", target_lang: str = "ko"):
         self.charmap = charmap or Charmap(target_lang=target_lang)
         self.target_lang = target_lang
@@ -179,6 +198,9 @@ class RomWriter:
             if len(encoded) <= actual_text_len:
                 self._write_in_place(rom, address, encoded, original_length, stats)
             else:
+                if self._is_fixed_width_table(entry):
+                    stats["skipped_same"] += 1
+                    return
                 # Truncate to fit the original text slot
                 truncated = self._truncate_encoded(encoded, actual_text_len)
                 self._write_in_place(rom, address, truncated, original_length, stats)
@@ -452,6 +474,9 @@ class RomWriter:
                 self._write_in_place_v2(rom, address, encoded, original_length)
                 stats["in_place"] += 1
             else:
+                if self._is_fixed_width_table(entry):
+                    stats["skipped"] += 1
+                    return
                 # Text is too long - search for pointers to enable relocation
                 found_pointers = self._search_pointers(rom, address)
                 if found_pointers:
@@ -465,3 +490,10 @@ class RomWriter:
                     stats["in_place"] += 1
         else:
             stats["skipped"] += 1
+
+    def _is_fixed_width_table(self, entry: dict) -> bool:
+        """Return True for table fields that must not be truncated."""
+        category = entry.get("category", "")
+        if category in self._FIXED_WIDTH_TABLE_CATEGORIES:
+            return True
+        return bool(entry.get("table_name")) and not entry.get("pointer_sources")
