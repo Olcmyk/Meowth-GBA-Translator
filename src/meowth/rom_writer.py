@@ -37,7 +37,7 @@ class RomWriter:
     # Minimum contiguous free block required (bytes)
     _MIN_FREE_BLOCK = 512 * 1024  # 512 KB
 
-    def __init__(self, charmap: Optional[Charmap] = None, game: str = "firered", target_lang: str = "zh-Hans"):
+    def __init__(self, charmap: Optional[Charmap] = None, game: str = "firered", target_lang: str = "ko"):
         self.charmap = charmap or Charmap(target_lang=target_lang)
         self.target_lang = target_lang
         self.FONT_BOUNDARY = self._FONT_BOUNDARIES.get(game, 0x01FD3000)

@@ -136,6 +136,8 @@ def _is_wide(ch: str) -> bool:
     cp = ord(ch)
     return (
         0x4E00 <= cp <= 0x9FFF
+        or 0xAC00 <= cp <= 0xD7A3
+        or 0x3130 <= cp <= 0x318F
         or 0x3400 <= cp <= 0x4DBF
         or 0x3000 <= cp <= 0x303F
         or 0xFF01 <= cp <= 0xFF60

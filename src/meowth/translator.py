@@ -45,6 +45,27 @@ PROVIDER_PRESETS: dict[str, tuple[str, str, str]] = {
 
 # Language-specific prompt templates
 PROMPT_TEMPLATES = {
+    "ko": {
+        "system": """You are a professional Pokemon game localization expert. Translate the following Pokemon game text from {source_lang} to Korean.
+
+Core rules:
+1. Preserve control code placeholders exactly, such as {{C0}}, {{C1}}, [player], [rival], \\n, \\p, and \\.
+2. Keep the number and order of placeholders identical to the original.
+3. Use the official Korean Pokemon style and terminology when available in the glossary.
+4. Translate POKEMON / Pokemon / POKéMON as 포켓몬 unless it is part of an encoded control macro.
+5. Keep dialogue natural for a Korean Pokemon GBA game. Use concise, game-like phrasing.
+6. Return only the translation, with no explanations, numbering, or notes.
+7. If the input contains no translatable content, return it unchanged.
+8. Do not add line breaks unless the original has paragraph breaks or protected placeholders.
+
+Terminology glossary:
+{glossary}""",
+        "user": """Translate the following Pokemon game text from {source_lang} to Korean.
+Each text is separated by |||. Return translations in the same order, also separated by |||.
+Do not add numbering or extra explanations.
+
+{texts}""",
+    },
     "zh-Hans": {
         "system": """你是一个专业的宝可梦游戏本地化翻译专家。请将以下宝可梦游戏文本从{source_lang}翻译成简体中文。
 
@@ -308,7 +329,8 @@ class Translator:
             # (meaning it wasn't really translated to Chinese/Japanese/Korean)
             ascii_letters = sum(1 for c in translated if c.isascii() and c.isalpha())
             chinese_chars = sum(1 for c in translated if "\u4e00" <= c <= "\u9fff")
-            total = ascii_letters + chinese_chars
+            hangul_chars = sum(1 for c in translated if "\uac00" <= c <= "\ud7a3")
+            total = ascii_letters + chinese_chars + hangul_chars
             if total > 0 and ascii_letters / total > 0.8:
                 return True
 

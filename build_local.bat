@@ -33,7 +33,7 @@ echo.
 REM Pre-build glossary JSON files
 echo [3/5] Building glossary cache...
 mkdir resources 2>nul
-python -c "from meowth.glossary import Glossary; from meowth.languages import SUPPORTED_LANGUAGES; import json; from pathlib import Path; [Path('resources').joinpath(f'glossary_en_{target}.json').write_text(json.dumps({'source_to_target': Glossary(source_lang='en', target_lang=target).source_to_target}, ensure_ascii=False, indent=2), encoding='utf-8') or print(f'Generated glossary_en_{target}.json') for target in SUPPORTED_LANGUAGES if target != 'en']"
+python -c "from meowth.glossary import Glossary; import json; from pathlib import Path; target='ko'; Path('resources').joinpath(f'glossary_en_{target}.json').write_text(json.dumps({'source_to_target': Glossary(source_lang='en', target_lang=target).source_to_target}, ensure_ascii=False, indent=2), encoding='utf-8'); print(f'Generated glossary_en_{target}.json')"
 echo Done.
 echo.
 

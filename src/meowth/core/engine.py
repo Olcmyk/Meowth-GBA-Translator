@@ -10,6 +10,7 @@ from ..control_codes import protect, restore
 from ..font_patch import apply_font_patch
 from ..glossary import Glossary
 from ..i18n import Messages
+from ..korean_font import prepare_korean_font_patch
 from ..languages import is_cjk_language
 from ..pcs_codes import FD_MACROS
 from ..rom_writer import RomWriter
@@ -423,6 +424,46 @@ class TranslationEngine:
 
         data = json.loads(translations_path.read_text(encoding="utf-8"))
         data = convert_format(data)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Collect all entries before patching so Korean builds can subset fonts
+        # to exactly the glyphs that may be injected into the ROM.
+        all_entries = []
+        for table in data["tables"]:
+            for entry in table["entries"]:
+                if "translated" in entry:
+                    all_entries.append(entry)
+        for entry in data["free_texts"]:
+            if "translated" in entry:
+                all_entries.append(entry)
+
+        # Chinese-only manual entries must not leak into Korean builds.
+        if self.config.game == "firered" and self.config.target_lang == "zh-Hans":
+            manual_path = Path(__file__).parent.parent / "manual_entries.json"
+            if manual_path.exists():
+                manual = json.loads(manual_path.read_text(encoding="utf-8"))
+                all_entries.extend(manual)
+                self._log("info", Messages.ADDED_MANUAL_ENTRIES.format(count=len(manual)))
+
+        patch_root = None
+        if self.config.target_lang == "ko":
+            if not self.config.korean_font_zip:
+                raise RuntimeError(
+                    "Korean builds require Galmuri-v2.40.3.zip. "
+                    "Pass --korean-font-zip or set MEOWTH_KOREAN_FONT_ZIP."
+                )
+            patch_root, charmap_path, font_result = prepare_korean_font_patch(
+                self.config.korean_font_zip,
+                self.config.work_dir,
+                self.config.game,
+                entries=all_entries,
+            )
+            self.charmap = Charmap(charmap_path=charmap_path, target_lang="ko")
+            self._log(
+                "info",
+                f"Korean font subset generated: {font_result.glyph_count}/"
+                f"{font_result.capacity} glyphs",
+            )
 
         writer = RomWriter(self.charmap, game=self.config.game,
                           target_lang=self.config.target_lang)
@@ -438,30 +479,15 @@ class TranslationEngine:
             self._log("info", Messages.APPLYING_FONT_PATCH)
             temp_rom = output_path.parent / "temp_fontpatch.gba"
             writer.save_rom(rom, temp_rom)
-            apply_font_patch(temp_rom, temp_rom, game=self.config.game)
+            if patch_root is not None:
+                apply_font_patch(temp_rom, temp_rom, game=self.config.game, patch_root=patch_root)
+            else:
+                apply_font_patch(temp_rom, temp_rom, game=self.config.game)
             rom = writer.load_rom(temp_rom)
             temp_rom.unlink(missing_ok=True)
             self._log("info", Messages.FONT_PATCH_APPLIED)
         else:
             self._log("info", Messages.SKIPPING_FONT_PATCH.format(lang=self.config.target_lang))
-
-        # Collect all entries
-        all_entries = []
-        for table in data["tables"]:
-            for entry in table["entries"]:
-                if "translated" in entry:
-                    all_entries.append(entry)
-        for entry in data["free_texts"]:
-            if "translated" in entry:
-                all_entries.append(entry)
-
-        # Load manual entries (FireRed-specific)
-        if self.config.game == "firered":
-            manual_path = Path(__file__).parent.parent / "manual_entries.json"
-            if manual_path.exists():
-                manual = json.loads(manual_path.read_text(encoding="utf-8"))
-                all_entries.extend(manual)
-                self._log("info", Messages.ADDED_MANUAL_ENTRIES.format(count=len(manual)))
 
         # Inject texts
         self._log("info", Messages.INJECTING_TEXTS.format(count=len(all_entries)))

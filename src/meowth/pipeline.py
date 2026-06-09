@@ -34,7 +34,7 @@ class Pipeline:
         translator: Translator | None = None,
         game: str = "firered",
         source_lang: str = "en",
-        target_lang: str = "zh-Hans",
+        target_lang: str = "ko",
         provider: str | None = None,
         api_base: str | None = None,
         api_key_env: str | None = None,

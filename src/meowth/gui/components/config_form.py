@@ -11,11 +11,7 @@ from ...translator import PROVIDER_PRESETS
 # Language display name -> language code (must match languages.py)
 LANGUAGES = {
     "English": "en",
-    "Chinese": "zh-Hans",
-    "Spanish": "es",
-    "French": "fr",
-    "German": "de",
-    "Italian": "it",
+    "Korean": "ko",
 }
 
 LANG_NAMES = list(LANGUAGES.keys())
@@ -71,7 +67,7 @@ class ConfigForm(ctk.CTkFrame):
         tgt_frame.pack(side="right", fill="x", expand=True, padx=(6, 0))
         ctk.CTkLabel(tgt_frame, text="Target:", font=("", 11)).pack(anchor="w")
         self.target_lang = ctk.CTkComboBox(tgt_frame, values=LANG_NAMES, state="readonly", height=30)
-        self.target_lang.set("Chinese")
+        self.target_lang.set("Korean")
         self.target_lang.pack(fill="x", pady=(2, 0))
 
         # --- Row 3: Provider + Model ---

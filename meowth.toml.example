@@ -4,7 +4,9 @@
 provider = "deepseek"
 model = "deepseek-chat"
 source_language = "en"
-target_language = "zh-Hans"
+target_language = "ko"
+# Or pass --korean-font-zip / set MEOWTH_KOREAN_FONT_ZIP.
+# korean_font_zip = "C:/Users/-/Downloads/Galmuri-v2.40.3.zip"
 
 [translation.api]
 # Set the actual key in your shell or .env file.
