@@ -32,6 +32,7 @@ class Messages:
 
     # Cache and translation
     CACHE_MISMATCH = "[Cache split mismatch ({parts} vs {texts}), retranslating]"
+    CACHE_UNTRANSLATED = "[Cached result is untranslated, ignoring cache and retranslating]"
     PARTIAL_UNTRANSLATED = "[Partial untranslated, caching translated items only]"
     BATCH_SPLIT_MISMATCH = "[Batch split mismatch ({parts} vs {texts}), translating individually]"
     API_REQUEST_FAILED = "[API request failed: {error}, retrying in {wait}s ({attempt}/{max_retries})]"

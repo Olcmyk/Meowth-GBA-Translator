@@ -213,7 +213,12 @@ class Translator:
         }
 
     def _get_single_cached(self, system: str, text: str) -> str | None:
-        return self._get_cached(self._cache_key(self._single_text_request(system, text)))
+        cached = self._get_cached(self._cache_key(self._single_text_request(system, text)))
+        if cached is None:
+            return None
+        if self._translation_unchanged(text, cached) and not self._can_cache_unchanged(text):
+            return None
+        return cached
 
     def _save_single_cached(self, system: str, text: str, content: str):
         request_data = self._single_text_request(system, text)
@@ -267,13 +272,22 @@ class Translator:
         if cached is not None:
             parts = [t.strip() for t in cached.split("|||") if t.strip()]
             if len(parts) == len(request_texts):
-                for text, part in zip(request_texts, parts):
-                    for idx in grouped_missing[text]:
-                        cached_results[idx] = part
-                return self._complete_results(cached_results)
-            # Cache had misaligned result — fall through to re-translate
-            from .i18n import Messages
-            print(Messages.CACHE_MISMATCH.format(parts=len(parts), texts=len(request_texts)))
+                if any(
+                    self._translation_unchanged(text, part)
+                    and not self._can_cache_unchanged(text)
+                    for text, part in zip(request_texts, parts)
+                ):
+                    from .i18n import Messages
+                    print(Messages.CACHE_UNTRANSLATED)
+                else:
+                    for text, part in zip(request_texts, parts):
+                        for idx in grouped_missing[text]:
+                            cached_results[idx] = part
+                    return self._complete_results(cached_results)
+            else:
+                # Cache had misaligned result — fall through to re-translate
+                from .i18n import Messages
+                print(Messages.CACHE_MISMATCH.format(parts=len(parts), texts=len(request_texts)))
 
         # Call API
         content = self._call_api(system, user)
@@ -281,13 +295,15 @@ class Translator:
         # Split and check alignment (filter empty strings from trailing |||)
         parts = [t.strip() for t in content.split("|||") if t.strip()]
         if len(parts) == len(request_texts):
+            parts = self._retry_untranslated_parts(system, request_texts, parts)
             # Perfect split — cache and return
             has_untranslated = any(
                 self._translation_unchanged(orig, trans)
+                and not self._can_cache_unchanged(orig)
                 for orig, trans in zip(request_texts, parts)
             )
             if not has_untranslated:
-                self._save_cache(cache_key, request_data, content)
+                self._save_cache(cache_key, request_data, " ||| ".join(parts))
             else:
                 from .i18n import Messages
                 print(Messages.PARTIAL_UNTRANSLATED)
@@ -309,6 +325,30 @@ class Translator:
             for idx in grouped_missing[text]:
                 cached_results[idx] = part
         return self._complete_results(cached_results)
+
+    def _retry_untranslated_parts(
+        self, system: str, texts: list[str], parts: list[str]
+    ) -> list[str]:
+        """Retry unchanged CJK-target outputs with a stricter single-text prompt."""
+        if self.target_lang != "ko":
+            return parts
+        retried = list(parts)
+        for i, (original, translated) in enumerate(zip(texts, parts)):
+            if (
+                not self._translation_unchanged(original, translated)
+                or self._can_cache_unchanged(original)
+            ):
+                continue
+            stricter_user = (
+                "Translate this Pokemon GBA game text into Korean now. "
+                "Do not return the English source unchanged. Preserve control "
+                "placeholders exactly. Return only the Korean translation.\n\n"
+                f"{original}"
+            )
+            content = self._call_api(system, stricter_user).strip()
+            if not self._translation_unchanged(original, content):
+                retried[i] = content
+        return retried
 
     def _call_api(self, system: str, user: str, max_retries: int = 3) -> str:
         """Send a single chat completion request and return the content."""
@@ -360,11 +400,22 @@ class Translator:
             }
             cache_key = self._cache_key(request_data)
             cached = self._get_cached(cache_key)
-            if cached is not None:
+            if (
+                cached is not None
+                and (
+                    not self._translation_unchanged(text, cached)
+                    or self._can_cache_unchanged(text)
+                )
+            ):
                 results.append(cached)
                 continue
 
             content = self._call_api(system, user)
+            if (
+                self._translation_unchanged(text, content)
+                and not self._can_cache_unchanged(text)
+            ):
+                content = self._retry_untranslated_parts(system, [text], [content])[0]
             if (
                 not self._translation_unchanged(text, content)
                 or self._can_cache_unchanged(text)

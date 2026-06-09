@@ -203,6 +203,46 @@ def _copy_duplicate_translations(duplicates: list[list[dict]]) -> None:
             entry["translated"] = translated
 
 
+def _contains_hangul(text: str) -> bool:
+    return any("\uac00" <= ch <= "\ud7a3" for ch in text)
+
+
+def _assert_korean_translation_progress(data: dict) -> None:
+    entries: list[dict] = []
+    for table in data["tables"]:
+        entries.extend(table["entries"])
+    entries.extend(data["free_texts"])
+
+    checked = 0
+    hangul = 0
+    unchanged = 0
+    for entry in entries:
+        original = entry.get("original", "").strip('"')
+        translated = entry.get("translated", "").strip('"')
+        if not translated:
+            continue
+        protected, _ = protect(original)
+        if not _has_translatable_text(protected):
+            continue
+        checked += 1
+        if translated == original:
+            unchanged += 1
+        if _contains_hangul(translated):
+            hangul += 1
+
+    if checked >= 5 and hangul == 0:
+        raise RuntimeError(
+            "Korean translation produced no Hangul text. The LLM/API appears "
+            "to be returning English or failing; refusing to build an "
+            "untranslated Korean ROM."
+        )
+    if checked >= 20 and unchanged == checked:
+        raise RuntimeError(
+            "Korean translation left every translatable entry unchanged. "
+            "Check the API key, provider/model, and translation cache."
+        )
+
+
 def _postprocess_fd_macros(json_path: Path):
     """Replace HMA's raw FD escape sequences with named macros."""
     _HMA_KNOWN = {0x01, 0x02, 0x03, 0x04, 0x06}
@@ -319,6 +359,8 @@ class TranslationEngine:
                     f"Batch {idx + 1} completed")
 
         _copy_duplicate_translations(duplicate_free_texts)
+        if self.config.target_lang == "ko":
+            _assert_korean_translation_progress(data)
 
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(
@@ -422,6 +464,8 @@ class TranslationEngine:
             try:
                 results = self.translator.translate_batch(protected_list, glossary_ctx)
             except Exception as e:
+                if self.config.target_lang == "ko":
+                    raise RuntimeError(f"Korean table translation failed: {e}") from e
                 print(f"[Table batch LLM failed: {e}, keeping originals]")
                 for protected in protected_list:
                     for entry, _ in grouped[protected]:
@@ -489,6 +533,8 @@ class TranslationEngine:
         try:
             results = self.translator.translate_batch(protected_list, glossary_ctx)
         except Exception as e:
+            if self.config.target_lang == "ko":
+                raise RuntimeError(f"Korean text translation failed: {e}") from e
             print(f"[Batch failed after retries: {e}, keeping originals]")
             for entry in remaining:
                 entry["translated"] = entry["original"]
