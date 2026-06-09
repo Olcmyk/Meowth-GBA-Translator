@@ -713,6 +713,13 @@ class TranslationEngine:
             )
         if self.config.target_lang == "ko":
             _assert_korean_rom_injection(all_entries, rom, stats, self.charmap)
+            if stats.get("compacted", 0):
+                self._log(
+                    "info",
+                    "Korean text compacted to fit ROM space: "
+                    f"{stats.get('compacted', 0)} entries, "
+                    f"{stats.get('compacted_saved', 0):,} bytes saved",
+                )
         self._log("info", Messages.INJECTION_STATS.format(
             in_place=stats['in_place'],
             relocated=stats['relocated'],

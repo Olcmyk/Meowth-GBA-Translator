@@ -63,6 +63,7 @@ class RomWriter:
         self.write_offset = self.EXPANSION_START  # updated in inject()
         self.write_limit = self.FONT_BOUNDARY
         self.free_blocks: list[list[int]] = []
+        self._encoded_overrides: dict[str, bytes] = {}
 
     @staticmethod
     def _find_free_space(rom: bytes, boundary: int) -> tuple[int, int]:
@@ -119,11 +120,136 @@ class RomWriter:
     def _reset_free_blocks(self, rom: bytes) -> int:
         blocks = self._find_free_blocks(rom)
         self.free_blocks = [[start, end] for start, end in blocks]
+        self._sort_free_blocks()
         if self.free_blocks:
             self.write_offset, self.write_limit = self.free_blocks[0]
         else:
             self.write_offset = self.write_limit = len(rom)
         return sum(end - start for start, end in blocks)
+
+    def _sort_free_blocks(self) -> None:
+        self.free_blocks.sort(key=lambda block: block[1] - block[0], reverse=True)
+
+    def _add_free_block(self, start: int, end: int) -> None:
+        if end - start < 16:
+            return
+        self.free_blocks.append([start, end])
+        self._sort_free_blocks()
+
+    def _actual_text_len(self, rom: bytes, address: int, max_length: int) -> int:
+        actual_text_len = max_length
+        for j in range(max_length):
+            if address + j < len(rom) and rom[address + j] == 0xFF:
+                actual_text_len = j + 1
+                break
+        return actual_text_len
+
+    def _reclaim_relocated_text_slots(self, rom: bytes, entries: list[dict]) -> int:
+        """Reuse old pointer-based text slots that will be redirected.
+
+        Pointer-based text no longer needs its original bytes once every pointer
+        source is updated to the relocated Korean string. Reclaiming these slots
+        is required for full-game Korean builds where translated dialogue is
+        substantially larger than the remaining 0xFF expansion space.
+        """
+        reclaimed: list[tuple[int, int]] = []
+        seen: set[tuple[int, int]] = set()
+        for entry in entries:
+            original = entry.get("original", "").strip('"')
+            translated = entry.get("translated", "").strip('"')
+            if entry.get("category") == "scripts" and not is_real_text(original):
+                continue
+            if not translated or translated == original:
+                continue
+            pointer_sources = entry.get("pointer_addresses", entry.get("pointer_sources", []))
+            if not pointer_sources:
+                continue
+            address = int(entry.get("address", "0x0").replace("0x", ""), 16)
+            original_length = int(entry.get("byte_length") or 0)
+            if address < self.MIN_POINTER_SOURCE or original_length <= 0:
+                continue
+            try:
+                encoded = self.charmap.encode(translated)
+            except Exception:
+                continue
+            actual_text_len = self._actual_text_len(rom, address, original_length)
+            if len(encoded) <= actual_text_len:
+                continue
+            block = (address, min(address + actual_text_len, len(rom)))
+            if block not in seen:
+                seen.add(block)
+                reclaimed.append(block)
+
+        for start, end in reclaimed:
+            self._add_free_block(start, end)
+        return sum(end - start for start, end in reclaimed)
+
+    def _compact_korean_relocation_texts(
+        self,
+        rom: bytes,
+        entries: list[dict],
+        stats: dict,
+    ) -> None:
+        if self.target_lang != "ko":
+            return
+
+        candidates: list[tuple[dict, bytes]] = []
+        for entry in entries:
+            original = entry.get("original", "").strip('"')
+            translated = entry.get("translated", "").strip('"')
+            if entry.get("category") == "scripts" and not is_real_text(original):
+                continue
+            if not translated or translated == original:
+                continue
+            pointer_sources = entry.get("pointer_addresses", entry.get("pointer_sources", []))
+            if not pointer_sources:
+                continue
+            address = int(entry.get("address", "0x0").replace("0x", ""), 16)
+            original_length = int(entry.get("byte_length") or 0)
+            if address <= 0 or original_length <= 0:
+                continue
+            try:
+                encoded = self.charmap.encode(translated)
+            except Exception:
+                continue
+            if len(encoded) <= self._actual_text_len(rom, address, original_length):
+                continue
+            candidates.append((entry, encoded))
+
+        if not candidates:
+            return
+
+        available = sum(end - start for start, end in self.free_blocks)
+        needed = sum(len(encoded) for _, encoded in candidates)
+        reserve = min(32 * 1024, max(0, available // 10))
+        budget = max(0, available - reserve)
+        if needed <= budget:
+            return
+
+        min_cap = 8
+        cap = max(min_cap, budget // len(candidates))
+        while cap > min_cap and sum(min(len(encoded), cap) for _, encoded in candidates) > budget:
+            cap -= 1
+
+        compacted = 0
+        saved = 0
+        for entry, encoded in candidates:
+            if len(encoded) <= cap:
+                continue
+            compacted_encoded = self._truncate_encoded(encoded, cap)
+            entry_id = entry.get("id")
+            if entry_id:
+                self._encoded_overrides[entry_id] = compacted_encoded
+            compacted += 1
+            saved += len(encoded) - len(compacted_encoded)
+
+        stats["compacted"] = compacted
+        stats["compacted_saved"] = saved
+        if compacted:
+            print(
+                f"Compacted {compacted:,} Korean relocated texts to fit ROM space "
+                f"(saved {saved:,} bytes; cap {cap} bytes)"
+            )
 
     def _allocate_relocation_space(self, size: int) -> int:
         for block in self.free_blocks:
@@ -356,6 +482,32 @@ class RomWriter:
             if ptr_addr + 4 <= len(rom):
                 rom[ptr_addr : ptr_addr + 4] = new_pointer.to_bytes(4, "little")
 
+    def _write_relocated_v2(
+        self,
+        rom: bytearray,
+        encoded: bytes,
+        pointer_sources: list,
+        stats: dict,
+    ) -> None:
+        try:
+            self._write_relocated(rom, encoded, pointer_sources)
+            stats["relocated"] += 1
+            return
+        except RuntimeError:
+            if self.target_lang != "ko":
+                raise
+
+        max_block = max((end - start for start, end in self.free_blocks), default=0)
+        if max_block < 2:
+            raise RuntimeError("No free ROM block left for compacted Korean text")
+        compacted = self._truncate_encoded(encoded, max_block)
+        self._write_relocated(rom, compacted, pointer_sources)
+        stats["relocated"] += 1
+        stats["compacted"] = stats.get("compacted", 0) + 1
+        stats["compacted_saved"] = stats.get("compacted_saved", 0) + (
+            len(encoded) - len(compacted)
+        )
+
     def _write_in_place_v2(
         self, rom: bytearray, address: int, encoded: bytes, max_length: int
     ) -> None:
@@ -467,7 +619,19 @@ class RomWriter:
             "skipped_garbage": 0, "skipped_unsafe": 0, "skipped_same": 0,
             "skipped_no_address": 0, "skipped_fixed_too_long": 0,
             "skipped_partial_ptrs": 0, "unsafe_ptrs": 0, "errors": 0,
+            "reclaimed": 0, "compacted": 0, "compacted_saved": 0,
         }
+
+        reclaimed = self._reclaim_relocated_text_slots(rom, entries)
+        stats["reclaimed"] = reclaimed
+        if reclaimed:
+            total_available = sum(end - start for start, end in self.free_blocks)
+            print(
+                f"Reclaimed {reclaimed:,} bytes from old pointer text slots "
+                f"({total_available:,} bytes total available)"
+            )
+        self._encoded_overrides = {}
+        self._compact_korean_relocation_texts(rom, entries, stats)
 
         for entry in entries:
             try:
@@ -506,7 +670,9 @@ class RomWriter:
             return
 
         try:
-            encoded = self.charmap.encode(translated)
+            encoded = self._encoded_overrides.get(entry.get("id"))
+            if encoded is None:
+                encoded = self.charmap.encode(translated)
         except Exception as e:
             print(f"Encoding error for {entry.get('id', '?')}: {e}")
             stats["errors"] += 1
@@ -516,20 +682,29 @@ class RomWriter:
         original_length = entry.get("byte_length", 0)
 
         if is_pointer_based and pointer_sources:
-            self._write_relocated(rom, encoded, pointer_sources)
-            stats["relocated"] += 1
+            actual_text_len = self._actual_text_len(rom, address, original_length) if original_length else 0
+            if address > 0 and original_length > 0 and len(encoded) <= actual_text_len:
+                self._write_in_place_v2(rom, address, encoded, original_length)
+                stats["in_place"] += 1
+            else:
+                self._write_relocated_v2(rom, encoded, pointer_sources, stats)
         elif address > 0 and original_length > 0:
-            actual_text_len = original_length
-            for j in range(original_length):
-                if address + j < len(rom) and rom[address + j] == 0xFF:
-                    actual_text_len = j + 1
-                    break
+            actual_text_len = self._actual_text_len(rom, address, original_length)
             capacity = original_length if self._is_fixed_width_table(entry) else actual_text_len
             if len(encoded) <= capacity:
                 self._write_in_place_v2(rom, address, encoded, original_length)
                 stats["in_place"] += 1
             else:
                 if self._is_fixed_width_table(entry):
+                    if self.target_lang == "ko":
+                        compacted = self._truncate_encoded(encoded, capacity)
+                        self._write_in_place_v2(rom, address, compacted, original_length)
+                        stats["in_place"] += 1
+                        stats["compacted"] = stats.get("compacted", 0) + 1
+                        stats["compacted_saved"] = stats.get("compacted_saved", 0) + (
+                            len(encoded) - len(compacted)
+                        )
+                        return
                     stats["skipped"] += 1
                     stats["skipped_fixed_too_long"] += 1
                     return
@@ -537,8 +712,7 @@ class RomWriter:
                 found_pointers = self._search_pointers(rom, address)
                 if found_pointers:
                     # Found pointers - use relocation instead of truncation
-                    self._write_relocated(rom, encoded, found_pointers)
-                    stats["relocated"] += 1
+                    self._write_relocated_v2(rom, encoded, found_pointers, stats)
                 else:
                     # No pointers found - truncate as last resort
                     truncated = self._truncate_encoded(encoded, actual_text_len)
