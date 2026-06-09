@@ -464,6 +464,8 @@ class RomWriter:
 
         stats = {
             "in_place": 0, "relocated": 0, "skipped": 0,
+            "skipped_garbage": 0, "skipped_unsafe": 0, "skipped_same": 0,
+            "skipped_no_address": 0, "skipped_fixed_too_long": 0,
             "skipped_partial_ptrs": 0, "unsafe_ptrs": 0, "errors": 0,
         }
 
@@ -486,6 +488,7 @@ class RomWriter:
         # Skip garbage entries (binary data misidentified as text)
         if entry.get("category") == "scripts" and not is_real_text(original):
             stats["skipped"] += 1
+            stats["skipped_garbage"] += 1
             return
 
         address = int(entry.get("address", "0x0").replace("0x", ""), 16)
@@ -494,10 +497,12 @@ class RomWriter:
         # Defense-in-depth: never write in-place to the ARM code section
         if address < self.MIN_POINTER_SOURCE and not pointer_sources:
             stats["skipped"] += 1
+            stats["skipped_unsafe"] += 1
             return
 
         if not translated or translated == original:
             stats["skipped"] += 1
+            stats["skipped_same"] += 1
             return
 
         try:
@@ -526,6 +531,7 @@ class RomWriter:
             else:
                 if self._is_fixed_width_table(entry):
                     stats["skipped"] += 1
+                    stats["skipped_fixed_too_long"] += 1
                     return
                 # Text is too long - search for pointers to enable relocation
                 found_pointers = self._search_pointers(rom, address)
@@ -540,6 +546,7 @@ class RomWriter:
                     stats["in_place"] += 1
         else:
             stats["skipped"] += 1
+            stats["skipped_no_address"] += 1
 
     def _is_fixed_width_table(self, entry: dict) -> bool:
         """Return True for table fields that must not be truncated."""

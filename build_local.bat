@@ -15,17 +15,18 @@ if exist resources rmdir /s /q resources
 echo Done.
 echo.
 
-REM Ensure only Windows armips.exe exists
+REM Ensure Windows armips.exe exists
 echo [2/5] Preparing armips...
-if exist tools\armips (
-    del /q tools\armips
-    echo Removed macOS armips binary
-)
 if not exist tools\armips.exe (
-    echo ERROR: tools\armips.exe not found!
-    echo Please build armips first or copy it to tools directory.
-    pause
-    exit /b 1
+    if exist Pokemon_GBA_Font_Patch\pokeFRLG\tools\armips\armips.exe (
+        copy /y Pokemon_GBA_Font_Patch\pokeFRLG\tools\armips\armips.exe tools\armips.exe >nul
+        echo Copied Windows armips.exe from Pokemon_GBA_Font_Patch.
+    ) else (
+        echo ERROR: tools\armips.exe not found!
+        echo Please build armips first or copy it to tools directory.
+        pause
+        exit /b 1
+    )
 )
 echo Done.
 echo.

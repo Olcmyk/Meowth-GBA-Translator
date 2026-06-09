@@ -531,6 +531,9 @@ class TranslationEngine:
         for entry in batch:
             entry_id = entry.get("id", "")
             original = entry.get("original", "").strip('"')
+            if _is_placeholder_table_text(original):
+                entry["translated"] = original
+                continue
             if entry.get("category") == "scripts" and not is_real_text(original):
                 entry["translated"] = original
                 continue
@@ -692,6 +695,19 @@ class TranslationEngine:
         if self.config.target_lang == "ko" and stats.get("errors", 0):
             raise RuntimeError(
                 f"Korean ROM injection failed for {stats['errors']} entries. "
+                "The build was stopped instead of outputting a partially "
+                "English ROM."
+            )
+        if self.config.target_lang == "ko" and (
+            stats.get("skipped_fixed_too_long", 0)
+            or stats.get("skipped_no_address", 0)
+            or stats.get("skipped_unsafe", 0)
+        ):
+            raise RuntimeError(
+                "Korean ROM injection skipped translatable entries "
+                f"(fixed-too-long={stats.get('skipped_fixed_too_long', 0)}, "
+                f"no-address={stats.get('skipped_no_address', 0)}, "
+                f"unsafe={stats.get('skipped_unsafe', 0)}). "
                 "The build was stopped instead of outputting a partially "
                 "English ROM."
             )
