@@ -1,6 +1,7 @@
 """ROM writer for injecting translated text."""
 
 import json
+import os
 from pathlib import Path
 from typing import Optional
 
@@ -70,6 +71,10 @@ class RomWriter:
         self.write_limit = self.FONT_BOUNDARY
         self.free_blocks: list[list[int]] = []
         self._encoded_overrides: dict[str, bytes] = {}
+        self.allow_text_slot_reclaim = os.environ.get("MEOWTH_ALLOW_TEXT_SLOT_RECLAIM") == "1"
+        self.allow_implicit_pointer_search = (
+            os.environ.get("MEOWTH_ALLOW_IMPLICIT_POINTER_SEARCH") == "1"
+        )
 
     @staticmethod
     def _find_free_space(rom: bytes, boundary: int) -> tuple[int, int]:
@@ -646,7 +651,7 @@ class RomWriter:
             "reclaimed": 0, "compacted": 0, "compacted_saved": 0,
         }
 
-        reclaimed = self._reclaim_relocated_text_slots(rom, entries)
+        reclaimed = self._reclaim_relocated_text_slots(rom, entries) if self.allow_text_slot_reclaim else 0
         stats["reclaimed"] = reclaimed
         if reclaimed:
             total_available = sum(end - start for start, end in self.free_blocks)
@@ -736,16 +741,24 @@ class RomWriter:
                     stats["skipped"] += 1
                     stats["skipped_fixed_too_long"] += 1
                     return
-                # Text is too long - search for pointers to enable relocation
-                found_pointers = self._search_pointers(rom, address)
+                # Do not infer pointer sources by scanning arbitrary ROM data.
+                # Hacks often contain binary values that look like GBA pointers;
+                # rewriting those is what makes unrelated screens show the
+                # wrong text. Only explicitly extracted pointer sources may be
+                # redirected. An opt-in env var keeps the old behavior available
+                # for debugging known-safe ROMs.
+                found_pointers = (
+                    self._search_pointers(rom, address)
+                    if self.allow_implicit_pointer_search
+                    else []
+                )
                 if found_pointers:
-                    # Found pointers - use relocation instead of truncation
                     self._write_relocated_v2(rom, encoded, found_pointers, stats)
-                else:
-                    # No pointers found - truncate as last resort
-                    truncated = self._truncate_encoded(encoded, actual_text_len)
-                    self._write_in_place_v2(rom, address, truncated, original_length)
-                    stats["in_place"] += 1
+                    return
+
+                truncated = self._truncate_encoded(encoded, actual_text_len)
+                self._write_in_place_v2(rom, address, truncated, original_length)
+                stats["in_place"] += 1
         else:
             stats["skipped"] += 1
             stats["skipped_no_address"] += 1
