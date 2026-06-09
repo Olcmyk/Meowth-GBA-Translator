@@ -689,6 +689,12 @@ class TranslationEngine:
         # Inject texts
         self._log("info", Messages.INJECTING_TEXTS.format(count=len(all_entries)))
         rom, stats = writer.inject_texts(rom, all_entries)
+        if self.config.target_lang == "ko" and stats.get("errors", 0):
+            raise RuntimeError(
+                f"Korean ROM injection failed for {stats['errors']} entries. "
+                "The build was stopped instead of outputting a partially "
+                "English ROM."
+            )
         if self.config.target_lang == "ko":
             _assert_korean_rom_injection(all_entries, rom, stats, self.charmap)
         self._log("info", Messages.INJECTION_STATS.format(

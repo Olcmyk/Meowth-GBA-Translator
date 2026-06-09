@@ -62,6 +62,7 @@ class RomWriter:
         self.FONT_BOUNDARY = self._FONT_BOUNDARIES.get(game, 0x01FD3000)
         self.write_offset = self.EXPANSION_START  # updated in inject()
         self.write_limit = self.FONT_BOUNDARY
+        self.free_blocks: list[list[int]] = []
 
     @staticmethod
     def _find_free_space(rom: bytes, boundary: int) -> tuple[int, int]:
@@ -88,6 +89,52 @@ class RomWriter:
                 best_end = pos
         return best_start, best_end
 
+    @staticmethod
+    def _find_free_blocks(
+        rom: bytes,
+        start: int = EXPANSION_START,
+        min_size: int = 16,
+    ) -> list[tuple[int, int]]:
+        """Find all usable 0xFF blocks in expanded ROM space.
+
+        Korean builds may need far more redirected text space than the single
+        largest block left after the font patch. Any 0xFF run in the expanded
+        half of the ROM is unused by definition after patching, so it can be
+        used as a text relocation target.
+        """
+        blocks: list[tuple[int, int]] = []
+        pos = min(start, len(rom))
+        while pos < len(rom):
+            if rom[pos] != 0xFF:
+                pos += 1
+                continue
+            block_start = pos
+            while pos < len(rom) and rom[pos] == 0xFF:
+                pos += 1
+            if pos - block_start >= min_size:
+                blocks.append((block_start, pos))
+        blocks.sort(key=lambda block: block[1] - block[0], reverse=True)
+        return blocks
+
+    def _reset_free_blocks(self, rom: bytes) -> int:
+        blocks = self._find_free_blocks(rom)
+        self.free_blocks = [[start, end] for start, end in blocks]
+        if self.free_blocks:
+            self.write_offset, self.write_limit = self.free_blocks[0]
+        else:
+            self.write_offset = self.write_limit = len(rom)
+        return sum(end - start for start, end in blocks)
+
+    def _allocate_relocation_space(self, size: int) -> int:
+        for block in self.free_blocks:
+            start, end = block
+            if start + size <= end:
+                block[0] = start + size
+                self.write_offset = block[0]
+                self.write_limit = end
+                return start
+        raise RuntimeError(f"No free ROM block large enough for {size} bytes")
+
     def inject(
         self,
         rom_path: str | Path,
@@ -111,14 +158,15 @@ class RomWriter:
         with open(rom_path, "rb") as f:
             rom = bytearray(f.read())
 
-        # Auto-detect safe expansion start (avoid overwriting hack data)
-        free_start, free_end = self._find_free_space(rom, self.FONT_BOUNDARY)
-        available = free_end - free_start
+        # Auto-detect safe expansion blocks (avoid overwriting hack/font data)
+        available = self._reset_free_blocks(rom)
         if available < self._MIN_FREE_BLOCK:
-            print(f"Warning: only {available:,} bytes free before font boundary")
-        self.write_offset = free_start
-        self.write_limit = free_end
-        print(f"Expansion region start: 0x{free_start:08X} ({available:,} bytes available)")
+            print(f"Warning: only {available:,} bytes free for redirected text")
+        first = self.free_blocks[0] if self.free_blocks else [0, 0]
+        print(
+            f"Expansion region start: 0x{first[0]:08X} "
+            f"({available:,} bytes available across {len(self.free_blocks)} blocks)"
+        )
 
         # Load translations
         with open(translations_path, "r", encoding="utf-8") as f:
@@ -195,7 +243,8 @@ class RomWriter:
                 if address + j < len(rom) and rom[address + j] == 0xFF:
                     actual_text_len = j + 1  # include terminator
                     break
-            if len(encoded) <= actual_text_len:
+            capacity = original_length if self._is_fixed_width_table(entry) else actual_text_len
+            if len(encoded) <= capacity:
                 self._write_in_place(rom, address, encoded, original_length, stats)
             else:
                 if self._is_fixed_width_table(entry):
@@ -212,21 +261,23 @@ class RomWriter:
     ) -> None:
         """Write text to expansion area and update pointers."""
         # Check boundary
-        if self.write_offset + len(encoded) >= self.write_limit:
-            print(f"Warning: Approaching free-space limit at 0x{self.write_offset:X}")
+        try:
+            target = self._allocate_relocation_space(len(encoded))
+        except RuntimeError as e:
+            print(f"Warning: {e}")
             stats["errors"] += 1
             return
 
         # Ensure ROM is large enough
-        if self.write_offset + len(encoded) > len(rom):
+        if target + len(encoded) > len(rom):
             stats["errors"] += 1
             return
 
         # Write encoded text
-        rom[self.write_offset : self.write_offset + len(encoded)] = encoded
+        rom[target : target + len(encoded)] = encoded
 
         # Update all pointers (skip false positives in code section)
-        new_pointer = self.POINTER_OFFSET + self.write_offset
+        new_pointer = self.POINTER_OFFSET + target
         for ptr_src in pointer_sources:
             ptr_addr = int(ptr_src.replace("0x", ""), 16)
             if ptr_addr < self.MIN_POINTER_SOURCE:
@@ -234,7 +285,6 @@ class RomWriter:
             if ptr_addr + 4 <= len(rom):
                 rom[ptr_addr : ptr_addr + 4] = new_pointer.to_bytes(4, "little")
 
-        self.write_offset += len(encoded)
         stats["written"] += 1
 
     def _write_in_place(
@@ -293,20 +343,18 @@ class RomWriter:
         self, rom: bytearray, encoded: bytes, pointer_sources: list
     ) -> None:
         """Write text to expansion area and update pointers (no stats)."""
-        if self.write_offset + len(encoded) >= self.write_limit:
-            raise RuntimeError(f"Approaching free-space limit at 0x{self.write_offset:X}")
-        if self.write_offset + len(encoded) > len(rom):
+        target = self._allocate_relocation_space(len(encoded))
+        if target + len(encoded) > len(rom):
             raise RuntimeError("ROM too small for relocated text")
 
-        rom[self.write_offset : self.write_offset + len(encoded)] = encoded
-        new_pointer = self.POINTER_OFFSET + self.write_offset
+        rom[target : target + len(encoded)] = encoded
+        new_pointer = self.POINTER_OFFSET + target
         for ptr_src in pointer_sources:
             ptr_addr = int(ptr_src.replace("0x", ""), 16)
             if ptr_addr < self.MIN_POINTER_SOURCE:
                 continue
             if ptr_addr + 4 <= len(rom):
                 rom[ptr_addr : ptr_addr + 4] = new_pointer.to_bytes(4, "little")
-        self.write_offset += len(encoded)
 
     def _write_in_place_v2(
         self, rom: bytearray, address: int, encoded: bytes, max_length: int
@@ -404,14 +452,15 @@ class RomWriter:
 
         Returns (rom, stats).
         """
-        # Auto-detect safe expansion start
-        free_start, free_end = self._find_free_space(rom, self.FONT_BOUNDARY)
-        available = free_end - free_start
+        # Auto-detect safe expansion blocks
+        available = self._reset_free_blocks(rom)
         if available < self._MIN_FREE_BLOCK:
-            print(f"Warning: only {available:,} bytes free before font boundary")
-        self.write_offset = free_start
-        self.write_limit = free_end
-        print(f"Expansion region start: 0x{free_start:08X} ({available:,} bytes available)")
+            print(f"Warning: only {available:,} bytes free for redirected text")
+        first = self.free_blocks[0] if self.free_blocks else [0, 0]
+        print(
+            f"Expansion region start: 0x{first[0]:08X} "
+            f"({available:,} bytes available across {len(self.free_blocks)} blocks)"
+        )
 
         stats = {
             "in_place": 0, "relocated": 0, "skipped": 0,
@@ -470,7 +519,8 @@ class RomWriter:
                 if address + j < len(rom) and rom[address + j] == 0xFF:
                     actual_text_len = j + 1
                     break
-            if len(encoded) <= actual_text_len:
+            capacity = original_length if self._is_fixed_width_table(entry) else actual_text_len
+            if len(encoded) <= capacity:
                 self._write_in_place_v2(rom, address, encoded, original_length)
                 stats["in_place"] += 1
             else:
