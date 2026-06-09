@@ -29,6 +29,7 @@ public class TextExtractor
         Console.Error.WriteLine("Phase 1: 提取表格文本...");
         ExtractTableTexts(entries, extractedAddresses, entriesByAddress, ref id);
         ExtractSequentialAbilityTexts(entries, extractedAddresses, entriesByAddress, ref id);
+        ExtractLooseAbilityDescriptionTexts(entries, extractedAddresses, entriesByAddress, ref id);
         Console.Error.WriteLine($"  表格文本: {entries.Count} 条");
 
         // Phase 2: 扫描 loadpointer 指令，构建安全的指针源映射
@@ -349,6 +350,49 @@ public class TextExtractor
         }
     }
 
+    private void ExtractLooseAbilityDescriptionTexts(
+        List<TextEntry> entries,
+        HashSet<int> extractedAddresses,
+        Dictionary<int, TextEntry> entriesByAddress,
+        ref int id)
+    {
+        var start = entries
+            .Where(e => e.Category == "ability_descriptions")
+            .Select(e => int.TryParse(e.Address.AsSpan(2), System.Globalization.NumberStyles.HexNumber, null, out var address) ? address : -1)
+            .Where(address => address >= 0)
+            .DefaultIfEmpty(_model.GetAddressFromAnchor(new NoDataChangeDeltaModel(), -1, "data.abilities.descriptions"))
+            .Min();
+        if (start < 0) return;
+
+        const int MaxAbilityDescriptionRegion = 0x0800;
+        var nextAbilityNameAddress = entries
+            .Where(e => e.Category == "ability_names")
+            .Select(e => int.TryParse(e.Address.AsSpan(2), System.Globalization.NumberStyles.HexNumber, null, out var address) ? address : -1)
+            .Where(address => address > start)
+            .DefaultIfEmpty(_model.Count)
+            .Min();
+        var end = Math.Min(Math.Min(_model.Count, start + MaxAbilityDescriptionRegion), nextAbilityNameAddress);
+
+        for (int address = start; address < end; address++)
+        {
+            if (extractedAddresses.Contains(address)) continue;
+            if (address > start && _model[address - 1] != 0xFF) continue;
+
+            var textLength = ValidateSequentialPcsText(address);
+            if (textLength < 2) continue;
+
+            var text = _model.TextConverter.Convert(_model, address, textLength);
+            if (!LooksLikeAbilityDescription(text)) continue;
+
+            AddOrMergeEntry(
+                entries, extractedAddresses, entriesByAddress, ref id,
+                "ability_description", "ability_descriptions", address, text, textLength, false, null,
+                "data.abilities.descriptions", null, "description");
+
+            address += Math.Max(0, textLength - 1);
+        }
+    }
+
     private static bool LooksLikeAbilityName(string text)
     {
         if (string.IsNullOrEmpty(text) || text == "\"\"") return false;
@@ -369,6 +413,7 @@ public class TextExtractor
         if (clean.Length < 8 || clean.Length > 96) return false;
         if (clean.Contains('\r') || clean.Contains('\n') || clean.Contains('\\') || clean.Contains('['))
             return false;
+        if (clean.Count(char.IsLower) < 2) return false;
         return clean.Count(char.IsLetter) >= 4;
     }
 
@@ -594,7 +639,7 @@ public class TextExtractor
         Dictionary<int, TextEntry> entriesByAddress,
         ref int id)
     {
-        const int LooseTextStart = 0x01000000;
+        const int LooseTextStart = 0x01600000;
         var start = Math.Min(LooseTextStart, _model.Count);
 
         for (int address = start; address < _model.Count; address++)
@@ -606,7 +651,7 @@ public class TextExtractor
             if (textLength < 4) continue;
 
             var text = _model.TextConverter.Convert(_model, address, textLength);
-            if (!LooksLikeLooseCustomText(text)) continue;
+            if (!LooksLikeLooseCustomText(address, text)) continue;
 
             AddOrMergeEntry(
                 entries, extractedAddresses, entriesByAddress, ref id,
@@ -616,13 +661,17 @@ public class TextExtractor
         }
     }
 
-    private static bool LooksLikeLooseCustomText(string text)
+    private static bool LooksLikeLooseCustomText(int address, string text)
     {
         if (string.IsNullOrEmpty(text) || text == "\"\"") return false;
 
         var clean = text.Trim('"').Trim();
         if (clean.Length < 8 || clean.Length > 512) return false;
         if (clean.Contains("\\!") || clean.Contains("\\?") || clean.Contains("\\CC")) return false;
+        if (clean.Contains("\\btn")) return false;
+        if (HasRawHexEscape(clean)) return false;
+        if (!IsMostlyPlainEnglishText(clean)) return false;
+        if (address < 0x01E00000 && !LooksLikeLongExpansionDescription(clean)) return false;
 
         int letters = 0;
         int textLike = 0;
@@ -645,6 +694,150 @@ public class TextExtractor
         if (letters < 6) return false;
         if (!clean.Any(char.IsWhiteSpace) && !clean.Any(ch => ".,!?;:'\"-/()[]".Contains(ch))) return false;
         return (double)textLike / clean.Length >= 0.75;
+    }
+
+    private static bool HasRawHexEscape(string text)
+    {
+        for (int i = 0; i + 2 < text.Length; i++)
+        {
+            if (text[i] != '\\') continue;
+
+            var next = text[i + 1];
+            if (next == 'n' || next == 'p' || next == 'l' || next == 'r' || next == '.' || next == 'q')
+                continue;
+
+            return true;
+        }
+        return false;
+    }
+
+    private static bool IsMostlyPlainEnglishText(string text)
+    {
+        if (!HasOnlyAllowedBracketTokens(text)) return false;
+
+        var plainText = RemoveBracketTokens(text);
+        int textLike = 0;
+        int letters = 0;
+        int lowercase = 0;
+        int words = 0;
+        bool inWord = false;
+
+        foreach (var ch in plainText)
+        {
+            var allowed =
+                ch <= 0x7E ||
+                ch == '\r' ||
+                ch == '\n' ||
+                ch == 'é' ||
+                ch == 'É' ||
+                ch == '♂' ||
+                ch == '♀';
+            if (!allowed)
+                return false;
+
+            if (char.IsLetter(ch))
+            {
+                letters++;
+                if (char.IsLower(ch))
+                    lowercase++;
+                if (!inWord)
+                {
+                    words++;
+                    inWord = true;
+                }
+            }
+            else if (ch != '\'')
+            {
+                inWord = false;
+            }
+
+            if (
+                char.IsLetterOrDigit(ch) ||
+                char.IsWhiteSpace(ch) ||
+                ch == '\\' ||
+                ch == '[' ||
+                ch == ']' ||
+                ".,!?;:'\"-/()[]".Contains(ch)
+            )
+            {
+                textLike++;
+            }
+        }
+
+        if (letters < 6 || lowercase < 2 || words < 2) return false;
+        return (double)textLike / plainText.Length >= 0.90;
+    }
+
+    private static bool LooksLikeLongExpansionDescription(string text)
+    {
+        var plain = RemoveBracketTokens(text)
+            .Replace("\\n", " ")
+            .Replace("\\p", " ")
+            .Replace("\\l", " ")
+            .Replace("\\r", " ")
+            .Replace("\\.", " ");
+
+        int words = 0;
+        bool inWord = false;
+        foreach (var ch in plain)
+        {
+            if (char.IsLetter(ch))
+            {
+                if (!inWord)
+                {
+                    words++;
+                    inWord = true;
+                }
+            }
+            else if (ch != '\'')
+            {
+                inWord = false;
+            }
+        }
+
+        return plain.Trim().Length >= 40 && words >= 6;
+    }
+
+    private static bool HasOnlyAllowedBracketTokens(string text)
+    {
+        var allowed = new HashSet<string>
+        {
+            "player", "rival",
+            "buffer1", "buffer2", "buffer3",
+            "red", "black", "blue", "green", "white", "grey", "gray",
+            "yellow", "magenta", "cyan", "lightblue", "lightgreen",
+        };
+
+        for (int i = 0; i < text.Length; i++)
+        {
+            if (text[i] != '[') continue;
+            var end = text.IndexOf(']', i + 1);
+            if (end < 0) return false;
+            var token = text.Substring(i + 1, end - i - 1).ToLowerInvariant();
+            if (!allowed.Contains(token)) return false;
+            i = end;
+        }
+
+        return true;
+    }
+
+    private static string RemoveBracketTokens(string text)
+    {
+        var output = new System.Text.StringBuilder(text.Length);
+        for (int i = 0; i < text.Length; i++)
+        {
+            if (text[i] == '[')
+            {
+                var end = text.IndexOf(']', i + 1);
+                if (end >= 0)
+                {
+                    i = end;
+                    continue;
+                }
+            }
+            output.Append(text[i]);
+        }
+        return output.ToString();
     }
 
     /// <summary>

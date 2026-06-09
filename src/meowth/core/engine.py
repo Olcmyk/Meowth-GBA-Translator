@@ -42,6 +42,14 @@ FIXED_WIDTH_TABLE_CATEGORIES = {
 }
 
 DESCRIPTION_LINE_WIDTH = 28
+DESCRIPTION_WRAP_SETTINGS = {
+    "move_descriptions": (24, 4),
+    "ability_descriptions": (24, 2),
+    "item_descriptions": (22, 2),
+    "berry_descriptions": (22, 2),
+    "decoration_descriptions": (22, 2),
+    "pokedex_descriptions": (26, 4),
+}
 TRANSLATION_REUSE_SCHEMA = 2
 
 # Table categories (routed through _translate_table instead of LLM free-text batches)
@@ -193,16 +201,22 @@ def _is_description_entry(entry: dict) -> bool:
     return "description" in entry.get("category", "")
 
 
+def _description_wrap_settings(entry: dict) -> tuple[int, int]:
+    category = entry.get("category", "")
+    return DESCRIPTION_WRAP_SETTINGS.get(category, (DESCRIPTION_LINE_WIDTH, 2))
+
+
 def _postprocess_korean_entry_translation(entry: dict, text: str) -> str:
     text = _fit_korean_table_entry(entry, text)
     category = entry.get("category", "")
     if category in FIXED_WIDTH_TABLE_CATEGORIES:
         return text
     if _is_description_entry(entry):
+        line_width, lines_per_box = _description_wrap_settings(entry)
         return wrap_text(
             text,
-            line_width=DESCRIPTION_LINE_WIDTH,
-            lines_per_box=2,
+            line_width=line_width,
+            lines_per_box=lines_per_box,
             target_lang="ko",
         )
     return wrap_text(text, target_lang="ko")
