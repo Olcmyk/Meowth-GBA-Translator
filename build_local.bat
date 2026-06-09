@@ -31,6 +31,17 @@ if not exist tools\armips.exe (
 echo Done.
 echo.
 
+REM Build MeowthBridge so the packaged app uses the latest extractor
+echo [2.5/5] Building MeowthBridge...
+dotnet build src\MeowthBridge\MeowthBridge.csproj -c Release
+if errorlevel 1 (
+    echo ERROR: MeowthBridge build failed!
+    pause
+    exit /b 1
+)
+echo Done.
+echo.
+
 REM Pre-build glossary JSON files
 echo [3/5] Building glossary cache...
 mkdir resources 2>nul
@@ -46,6 +57,7 @@ pyinstaller ^
   --windowed ^
   --onedir ^
   --add-data "src/meowth;meowth" ^
+  --add-data "src/MeowthBridge/bin/Release/net8.0;meowth/binaries/windows" ^
   --add-data "resources;resources" ^
   --add-data "pokeapi/data/v2/csv;pokeapi/data/v2/csv" ^
   --add-data "Pokemon_GBA_Font_Patch;Pokemon_GBA_Font_Patch" ^

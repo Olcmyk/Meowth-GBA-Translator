@@ -5,6 +5,8 @@ using HavenSoft.HexManiac.Core.Models;
 using HavenSoft.HexManiac.Core.Models.Runs;
 using HavenSoft.HexManiac.Core.Models.Code;
 
+#pragma warning disable CS0162
+
 namespace MeowthBridge;
 
 public class TextExtractor
@@ -20,11 +22,12 @@ public class TextExtractor
     {
         var entries = new List<TextEntry>();
         var extractedAddresses = new HashSet<int>();
+        var entriesByAddress = new Dictionary<int, TextEntry>();
         int id = 0;
 
         // Phase 1: 提取表格文本（100% 准确，HMA 已识别表格结构）
         Console.Error.WriteLine("Phase 1: 提取表格文本...");
-        ExtractTableTexts(entries, extractedAddresses, ref id);
+        ExtractTableTexts(entries, extractedAddresses, entriesByAddress, ref id);
         Console.Error.WriteLine($"  表格文本: {entries.Count} 条");
 
         // Phase 2: 扫描 loadpointer 指令，构建安全的指针源映射
@@ -35,13 +38,17 @@ public class TextExtractor
         // Phase 3: 提取 loadpointer 引用的文本（脚本明确引用，非常安全）
         Console.Error.WriteLine("Phase 3: 提取 loadpointer 文本...");
         int beforeLp = entries.Count;
-        ExtractLoadpointerTexts(entries, extractedAddresses, ref id, loadpointerMap);
+        ExtractLoadpointerTexts(entries, extractedAddresses, entriesByAddress, ref id, loadpointerMap);
         Console.Error.WriteLine($"  loadpointer 文本: {entries.Count - beforeLp} 条");
 
         return entries;
     }
 
-    private void ExtractTableTexts(List<TextEntry> entries, HashSet<int> extractedAddresses, ref int id)
+    private void ExtractTableTexts(
+        List<TextEntry> entries,
+        HashSet<int> extractedAddresses,
+        Dictionary<int, TextEntry> entriesByAddress,
+        ref int id)
     {
         var tableNames = new Dictionary<string, (string category, int? knownCount)>
         {
@@ -49,18 +56,26 @@ public class TextExtractor
             ["data.pokemon.names"] = ("pokemon_names", null),
             ["data.pokemon.type.names"] = ("type_names", 18),
             ["data.items.stats"] = ("item_names", 375),
+            ["data.items.berry.stats"] = ("berry_names", null),
+            ["data.decorations.stats"] = ("decoration_names", null),
             ["data.pokemon.moves.names"] = ("move_names", null),
             ["data.abilities.names"] = ("ability_names", null),
             ["data.pokemon.natures.names"] = ("nature_names", null),
             ["data.trainers.classes.names"] = ("trainer_classes", null),
+            ["data.trainers.stats"] = ("trainer_names", null),
+            ["data.pokemon.trades"] = ("trade_text", null),
 
             // 描述文本
             ["data.abilities.descriptions"] = ("ability_descriptions", null),
             ["data.pokemon.moves.descriptions"] = ("move_descriptions", null),
+            ["data.pokemon.contest.descriptions"] = ("contest_descriptions", null),
+            ["data.battlefrontier.tutor.descriptions1"] = ("tutor_descriptions", null),
+            ["data.battlefrontier.tutor.descriptions2"] = ("tutor_descriptions", null),
 
             // 地图和栖息地
             ["data.maps.names"] = ("map_names", null),
             ["data.maps.banks"] = ("map_banks", null),
+            ["data.pokedex.stats"] = ("pokedex_text", null),
             ["data.pokedex.habitat.names"] = ("habitat_names", null),
 
             // 战斗和菜单文本
@@ -75,19 +90,41 @@ public class TextExtractor
             ["data.text.trade.messages"] = ("trade_messages", null),
         };
 
-        foreach (var (tableName, (category, knownCount)) in tableNames)
+        foreach (var tableName in _model.Anchors.OrderBy(a => a))
         {
+            var (category, knownCount) = tableNames.TryGetValue(tableName, out var known)
+                ? known
+                : (InferBaseCategory(tableName), null);
             var address = _model.GetAddressFromAnchor(new NoDataChangeDeltaModel(), -1, tableName);
             if (address < 0) continue;
 
             var run = _model.GetNextRun(address);
             if (run is not ITableRun tableRun) continue;
+            if (!TableHasTextFields(tableRun)) continue;
 
             var elementCount = knownCount ?? tableRun.ElementCount;
             if (elementCount <= 1 && knownCount == null) continue;
 
             for (int i = 0; i < elementCount; i++)
             {
+                foreach (var textField in ExtractTableElementTexts(tableRun, tableName, category, i))
+                {
+                    if (string.IsNullOrEmpty(textField.Text)) continue;
+                    AddOrMergeEntry(
+                        entries, extractedAddresses, entriesByAddress, ref id,
+                        $"tbl_{textField.Category}",
+                        textField.Category,
+                        textField.TextAddress,
+                        textField.Text,
+                        textField.TextLength,
+                        textField.IsPointerBased,
+                        textField.PointerSource,
+                        tableName,
+                        i,
+                        textField.FieldName);
+                }
+                continue;
+
                 var (text, textAddress, textLength) = ExtractTableElementText(tableRun, i);
                 if (string.IsNullOrEmpty(text)) continue;
 
@@ -138,6 +175,187 @@ public class TextExtractor
         return (null, 0, 0);
     }
 
+    private List<ExtractedTextField> ExtractTableElementTexts(
+        ITableRun tableRun,
+        string tableName,
+        string baseCategory,
+        int index)
+    {
+        var results = new List<ExtractedTextField>();
+        var elementStart = tableRun.Start + index * tableRun.ElementLength;
+        int segmentOffset = 0;
+
+        foreach (var segment in tableRun.ElementContent)
+        {
+            var fieldName = string.IsNullOrWhiteSpace(segment.Name)
+                ? $"field_{segmentOffset:X}"
+                : segment.Name;
+            var category = InferFieldCategory(tableName, baseCategory, fieldName);
+
+            if (segment.Type == ElementContentType.PCS)
+            {
+                var text = _model.TextConverter.Convert(_model, elementStart + segmentOffset, segment.Length);
+                if (IsExtractableTableText(text))
+                {
+                    results.Add(new ExtractedTextField
+                    {
+                        FieldName = fieldName,
+                        Category = category,
+                        Text = text,
+                        TextAddress = elementStart + segmentOffset,
+                        TextLength = segment.Length,
+                        IsPointerBased = false
+                    });
+                }
+            }
+            else if (segment.Type == ElementContentType.Pointer && IsLikelyTextPointerField(tableName, fieldName, category))
+            {
+                var pointerSource = elementStart + segmentOffset;
+                var pointer = _model.ReadPointer(pointerSource);
+                if (pointer >= 0 && pointer < _model.Count)
+                {
+                    var textLength = ValidatePcsText(pointer);
+                    if (textLength >= 2)
+                    {
+                        var text = _model.TextConverter.Convert(_model, pointer, textLength);
+                        if (IsExtractableTableText(text))
+                        {
+                            results.Add(new ExtractedTextField
+                            {
+                                FieldName = fieldName,
+                                Category = category,
+                                Text = text,
+                                TextAddress = pointer,
+                                TextLength = textLength,
+                                IsPointerBased = true,
+                                PointerSource = pointerSource
+                            });
+                        }
+                    }
+                }
+            }
+
+            segmentOffset += segment.Length;
+        }
+
+        return results;
+    }
+
+    private static bool TableHasTextFields(ITableRun tableRun)
+    {
+        return tableRun.ElementContent.Any(segment =>
+            segment.Type == ElementContentType.PCS ||
+            segment.Type == ElementContentType.Pointer);
+    }
+
+    private static bool IsLikelyTextPointerField(string tableName, string fieldName, string category)
+    {
+        var field = fieldName.ToLowerInvariant();
+        if (field.Contains("description")) return true;
+        if (field == "text" || field == "line" || field == "label" || field == "message") return true;
+        if (field.EndsWith("text") || field.EndsWith("message")) return true;
+        if (category.Contains("description")) return true;
+        if (tableName.Contains(".text") || tableName.Contains(".menus.")) return true;
+        return false;
+    }
+
+    private static bool IsExtractableTableText(string text)
+    {
+        if (string.IsNullOrEmpty(text) || text == "\"\"") return false;
+        var clean = text.Trim('"').Trim();
+        return clean.Length > 0;
+    }
+
+    private static string InferBaseCategory(string tableName)
+    {
+        var name = tableName.Replace(".", "_").Replace("/", "_");
+        if (name.StartsWith("data_")) name = name["data_".Length..];
+        return $"table_{name}";
+    }
+
+    private static string InferFieldCategory(string tableName, string baseCategory, string fieldName)
+    {
+        var field = fieldName.ToLowerInvariant();
+        if (tableName == "data.items.stats")
+        {
+            if (field == "name") return "item_names";
+            if (field.StartsWith("description")) return "item_descriptions";
+        }
+        if (tableName == "data.items.berry.stats")
+        {
+            if (field == "name") return "berry_names";
+            if (field.StartsWith("description")) return "berry_descriptions";
+        }
+        if (tableName == "data.decorations.stats")
+        {
+            if (field == "name") return "decoration_names";
+            if (field.StartsWith("description")) return "decoration_descriptions";
+        }
+        if (tableName == "data.pokedex.stats")
+        {
+            if (field == "species") return "pokedex_species";
+            if (field.StartsWith("description")) return "pokedex_descriptions";
+        }
+        if (tableName == "data.trainers.stats" && field == "name") return "trainer_names";
+        if (tableName == "data.pokemon.trades")
+        {
+            if (field == "nickname") return "trade_nicknames";
+            if (field == "trainername") return "trade_trainer_names";
+        }
+        if (field.StartsWith("description"))
+            return baseCategory.Contains("description") ? baseCategory : $"{baseCategory}_descriptions";
+        if (field == "name" || field == "label" || field == "species" || field == "nickname" || field == "trainername")
+            return baseCategory;
+        return $"{baseCategory}_{field}";
+    }
+
+    private static void AddOrMergeEntry(
+        List<TextEntry> entries,
+        HashSet<int> extractedAddresses,
+        Dictionary<int, TextEntry> entriesByAddress,
+        ref int id,
+        string idPrefix,
+        string category,
+        int textAddress,
+        string text,
+        int textLength,
+        bool isPointerBased,
+        int? pointerSource,
+        string? tableName = null,
+        int? tableIndex = null,
+        string? tableField = null)
+    {
+        if (entriesByAddress.TryGetValue(textAddress, out var existing))
+        {
+            if (pointerSource.HasValue)
+            {
+                var source = $"0x{pointerSource.Value:X}";
+                if (!existing.PointerSources.Contains(source))
+                    existing.PointerSources.Add(source);
+                existing.IsPointerBased = true;
+            }
+            return;
+        }
+
+        extractedAddresses.Add(textAddress);
+        var entry = new TextEntry
+        {
+            Id = $"{idPrefix}_{id++:D5}",
+            Category = category,
+            Address = $"0x{textAddress:X}",
+            Original = text,
+            ByteLength = textLength,
+            IsPointerBased = isPointerBased,
+            TableName = tableName,
+            TableIndex = tableIndex,
+            TableField = tableField
+        };
+        if (pointerSource.HasValue)
+            entry.PointerSources.Add($"0x{pointerSource.Value:X}");
+        entries.Add(entry);
+        entriesByAddress[textAddress] = entry;
+    }
+
     /// <summary>
     /// 扫描 loadpointer (0x0F) 指令，构建 文本地址 → 指针源地址集合 的映射。
     /// 这是唯一安全的指针源发现方式：只信任脚本中明确的 loadpointer 指令，
@@ -180,15 +398,16 @@ public class TextExtractor
     /// 只提取脚本中明确通过 loadpointer (0x0F) 指令引用的文本
     /// </summary>
     private void ExtractLoadpointerTexts(
-        List<TextEntry> entries, HashSet<int> extractedAddresses, ref int id,
+        List<TextEntry> entries,
+        HashSet<int> extractedAddresses,
+        Dictionary<int, TextEntry> entriesByAddress,
+        ref int id,
         Dictionary<int, HashSet<int>> loadpointerMap)
     {
         int found = 0;
 
         foreach (var (textAddr, ptrSources) in loadpointerMap)
         {
-            if (extractedAddresses.Contains(textAddr)) continue;
-
             var textLength = ValidatePcsText(textAddr);
             if (textLength < 2) continue;
 
@@ -198,18 +417,22 @@ public class TextExtractor
             var cleanText = text.Trim('"');
             if (cleanText.Length < 1) continue;
 
-            extractedAddresses.Add(textAddr);
-
-            entries.Add(new TextEntry
+            if (entriesByAddress.TryGetValue(textAddr, out var existing))
             {
-                Id = $"scr_{id++:D5}",
-                Category = "scripts",
-                Address = $"0x{textAddr:X}",
-                PointerSources = ptrSources.Select(p => $"0x{p:X}").ToList(),
-                Original = text,
-                ByteLength = textLength,
-                IsPointerBased = true
-            });
+                foreach (var ptrSource in ptrSources.Select(p => $"0x{p:X}"))
+                    if (!existing.PointerSources.Contains(ptrSource))
+                        existing.PointerSources.Add(ptrSource);
+                existing.IsPointerBased = true;
+                continue;
+            }
+
+            AddOrMergeEntry(
+                entries, extractedAddresses, entriesByAddress, ref id,
+                "scr", "scripts", textAddr, text, textLength, true, null);
+            var added = entriesByAddress[textAddr];
+            foreach (var ptrSource in ptrSources.Select(p => $"0x{p:X}"))
+                if (!added.PointerSources.Contains(ptrSource))
+                    added.PointerSources.Add(ptrSource);
             found++;
         }
     }
@@ -339,8 +562,20 @@ public class TextEntry
     [JsonPropertyName("table_index")]
     public int? TableIndex { get; set; }
 
+    [JsonPropertyName("table_field")]
+    public string? TableField { get; set; }
+
     [JsonPropertyName("translated")]
     public string? Translated { get; set; }
 }
 
-
+internal class ExtractedTextField
+{
+    public string FieldName { get; set; } = "";
+    public string Category { get; set; } = "";
+    public string Text { get; set; } = "";
+    public int TextAddress { get; set; }
+    public int TextLength { get; set; }
+    public bool IsPointerBased { get; set; }
+    public int? PointerSource { get; set; }
+}

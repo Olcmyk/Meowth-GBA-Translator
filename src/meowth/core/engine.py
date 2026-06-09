@@ -34,7 +34,9 @@ _GAME_CODES: dict[str, str] = {
 FIXED_WIDTH_TABLE_CATEGORIES = {
     "pokemon_names", "move_names", "ability_names", "nature_names",
     "type_names", "item_names", "trainer_classes", "map_names",
-    "habitat_names", "menu_options", "menu_pc", "menu_pcoptions",
+    "habitat_names", "berry_names", "decoration_names", "pokedex_species",
+    "trainer_names", "trade_nicknames", "trade_trainer_names",
+    "menu_options", "menu_pc", "menu_pcoptions",
     "menu_pokemon", "menu_item_storage", "menu_pause",
     "menu_pokemon_options",
 }
@@ -139,7 +141,7 @@ def convert_format(data: dict) -> dict:
     free_texts: list = []
     for e in entries:
         cat = e.get("category", "")
-        if cat in TABLE_CATEGORIES:
+        if cat in TABLE_CATEGORIES or "description" in cat:
             tables_by_cat.setdefault(cat, []).append(e)
         else:
             free_texts.append(e)
@@ -758,11 +760,16 @@ class TranslationEngine:
         # MeowthBridge (via HMA) needs resources/ to exist in its CWD.
         # Find the actual resources directory and symlink/copy it into cwd.
         resources_src = get_resource_path("resources")
-        if not resources_src.exists():
+        if not (resources_src / "hma.py").exists():
             dev_resources = get_resource_path("HexManiacAdvance/src/HexManiac.Core/Models/Code")
-            if dev_resources.exists():
+            if (dev_resources / "hma.py").exists():
                 resources_src = dev_resources
         resources_dst = cwd / "resources"
+        if resources_dst.exists() and not (resources_dst / "hma.py").exists():
+            if resources_dst.is_symlink() or resources_dst.is_file():
+                resources_dst.unlink()
+            else:
+                _shutil.rmtree(str(resources_dst))
         if resources_src.exists() and not resources_dst.exists():
             try:
                 os.symlink(resources_src, resources_dst)
