@@ -37,6 +37,7 @@ class RomWriter:
 
     # Minimum contiguous free block required (bytes)
     _MIN_FREE_BLOCK = 512 * 1024  # 512 KB
+    _MIN_RELOCATION_BLOCK = 4 * 1024
 
     _FIXED_WIDTH_TABLE_CATEGORIES = {
         "pokemon_names",
@@ -105,23 +106,24 @@ class RomWriter:
     def _find_free_blocks(
         rom: bytes,
         start: int = EXPANSION_START,
-        min_size: int = 16,
+        end: int | None = None,
+        min_size: int = _MIN_RELOCATION_BLOCK,
     ) -> list[tuple[int, int]]:
-        """Find all usable 0xFF blocks in expanded ROM space.
+        """Find large usable 0xFF blocks in expanded ROM space.
 
-        Korean builds may need far more redirected text space than the single
-        largest block left after the font patch. Any 0xFF run in the expanded
-        half of the ROM is unused by definition after patching, so it can be
-        used as a text relocation target.
+        ROM hacks often contain short 0xFF runs inside compressed graphics,
+        tilemaps, or alignment padding. Treating those tiny runs as free text
+        space corrupts maps. Only large contiguous blocks are considered safe.
         """
         blocks: list[tuple[int, int]] = []
-        pos = min(start, len(rom))
-        while pos < len(rom):
+        scan_end = min(end if end is not None else len(rom), len(rom))
+        pos = min(start, scan_end)
+        while pos < scan_end:
             if rom[pos] != 0xFF:
                 pos += 1
                 continue
             block_start = pos
-            while pos < len(rom) and rom[pos] == 0xFF:
+            while pos < scan_end and rom[pos] == 0xFF:
                 pos += 1
             if pos - block_start >= min_size:
                 blocks.append((block_start, pos))
@@ -129,7 +131,7 @@ class RomWriter:
         return blocks
 
     def _reset_free_blocks(self, rom: bytes) -> int:
-        blocks = self._find_free_blocks(rom)
+        blocks = self._find_free_blocks(rom, end=self.FONT_BOUNDARY)
         self.free_blocks = [[start, end] for start, end in blocks]
         self._sort_free_blocks()
         if self.free_blocks:
