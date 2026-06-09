@@ -457,6 +457,7 @@ class TranslationEngine:
                 self.config.work_dir,
                 self.config.game,
                 entries=all_entries,
+                rom_path=original_rom,
             )
             self.charmap = Charmap(charmap_path=charmap_path, target_lang="ko")
             self._log(
