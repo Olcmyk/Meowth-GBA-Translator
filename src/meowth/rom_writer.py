@@ -150,6 +150,19 @@ class RomWriter:
                 break
         return actual_text_len
 
+    def _is_unsafe_extracted_entry(self, entry: dict) -> bool:
+        haystack = " ".join(
+            str(entry.get(key, ""))
+            for key in ("category", "table_name", "table_field", "id")
+        ).lower()
+        unsafe_tokens = (
+            "graphics", "gfx", "sprite", "sprites", "palette", "palettes",
+            "tileset", "tilesets", "tilemap", "animation", "animations",
+            "sound", "song", "songs", "cry", "cries", "music", "track",
+            "tracks",
+        )
+        return any(token in haystack for token in unsafe_tokens)
+
     def _reclaim_relocated_text_slots(self, rom: bytes, entries: list[dict]) -> int:
         """Reuse old pointer-based text slots that will be redirected.
 
@@ -161,6 +174,8 @@ class RomWriter:
         reclaimed: list[tuple[int, int]] = []
         seen: set[tuple[int, int]] = set()
         for entry in entries:
+            if self._is_unsafe_extracted_entry(entry):
+                continue
             original = entry.get("original", "").strip('"')
             translated = entry.get("translated", "").strip('"')
             if entry.get("category") == "scripts" and not is_real_text(original):
@@ -201,6 +216,8 @@ class RomWriter:
 
         candidates: list[tuple[dict, bytes]] = []
         for entry in entries:
+            if self._is_unsafe_extracted_entry(entry):
+                continue
             original = entry.get("original", "").strip('"')
             translated = entry.get("translated", "").strip('"')
             if entry.get("category") == "scripts" and not is_real_text(original):
@@ -624,7 +641,8 @@ class RomWriter:
             "in_place": 0, "relocated": 0, "skipped": 0,
             "skipped_garbage": 0, "skipped_unsafe": 0, "skipped_same": 0,
             "skipped_no_address": 0, "skipped_fixed_too_long": 0,
-            "skipped_partial_ptrs": 0, "unsafe_ptrs": 0, "errors": 0,
+            "skipped_partial_ptrs": 0, "unsafe_ptrs": 0,
+            "skipped_binary_table": 0, "errors": 0,
             "reclaimed": 0, "compacted": 0, "compacted_saved": 0,
         }
 
@@ -656,6 +674,10 @@ class RomWriter:
         translated = entry.get("translated", "").strip('"')
 
         # Skip garbage entries (binary data misidentified as text)
+        if self._is_unsafe_extracted_entry(entry):
+            stats["skipped"] += 1
+            stats["skipped_binary_table"] += 1
+            return
         if entry.get("category") == "scripts" and not is_real_text(original):
             stats["skipped"] += 1
             stats["skipped_garbage"] += 1

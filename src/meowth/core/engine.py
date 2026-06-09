@@ -41,6 +41,8 @@ FIXED_WIDTH_TABLE_CATEGORIES = {
     "menu_pokemon_options",
 }
 
+DESCRIPTION_LINE_WIDTH = 28
+
 # Table categories (routed through _translate_table instead of LLM free-text batches)
 TABLE_CATEGORIES = FIXED_WIDTH_TABLE_CATEGORIES | {
     "battle_text",  # Emerald battle messages with \\00/\\0F/\\34 runtime variables
@@ -184,6 +186,102 @@ def _fit_korean_table_entry(entry: dict, text: str) -> str:
     if category in FIXED_WIDTH_TABLE_CATEGORIES and byte_length > 0:
         return fit_korean_fixed_text(text, byte_length, category)
     return text
+
+
+def _is_description_entry(entry: dict) -> bool:
+    return "description" in entry.get("category", "")
+
+
+def _postprocess_korean_entry_translation(entry: dict, text: str) -> str:
+    text = _fit_korean_table_entry(entry, text)
+    category = entry.get("category", "")
+    if category in FIXED_WIDTH_TABLE_CATEGORIES:
+        return text
+    if _is_description_entry(entry):
+        return wrap_text(
+            text,
+            line_width=DESCRIPTION_LINE_WIDTH,
+            lines_per_box=2,
+            target_lang="ko",
+        )
+    return wrap_text(text, target_lang="ko")
+
+
+def _all_entries(data: dict) -> list[dict]:
+    entries: list[dict] = []
+    for table in data["tables"]:
+        entries.extend(table["entries"])
+    entries.extend(data["free_texts"])
+    return entries
+
+
+def _entry_reuse_keys(entry: dict) -> list[tuple]:
+    original = entry.get("original", "").strip('"')
+    return [
+        ("id", entry.get("id", "")),
+        (
+            "table",
+            entry.get("category", ""),
+            entry.get("table_name", ""),
+            entry.get("table_field", ""),
+            entry.get("table_index", None),
+            original,
+        ),
+        ("category_original", entry.get("category", ""), original),
+    ]
+
+
+def _is_reusable_translation(entry: dict, translated: str | None, target_lang: str) -> bool:
+    if not translated:
+        return False
+    original = entry.get("original", "").strip('"')
+    clean = translated.strip('"')
+    if not clean:
+        return False
+    if target_lang == "ko":
+        protected, _ = protect(original)
+        return clean != original or not _has_translatable_text(protected)
+    return clean != original
+
+
+def _seed_existing_translations(data: dict, existing_path: Path, target_lang: str) -> int:
+    if not existing_path.exists():
+        return 0
+    try:
+        existing = convert_format(json.loads(existing_path.read_text(encoding="utf-8")))
+    except (OSError, json.JSONDecodeError):
+        return 0
+
+    by_key: dict[tuple, dict] = {}
+    for old_entry in _all_entries(existing):
+        for key in _entry_reuse_keys(old_entry):
+            if key[1] != "":
+                by_key.setdefault(key, old_entry)
+
+    reused = 0
+    for entry in _all_entries(data):
+        if entry.get("translated"):
+            continue
+        for key in _entry_reuse_keys(entry):
+            old_entry = by_key.get(key)
+            if old_entry is None:
+                continue
+            translated = old_entry.get("translated")
+            if not _is_reusable_translation(entry, translated, target_lang):
+                continue
+            if target_lang == "ko" and _is_description_entry(entry):
+                translated = _postprocess_korean_entry_translation(entry, translated)
+            entry["translated"] = translated
+            reused += 1
+            break
+    return reused
+
+
+def _normalize_korean_translations_for_build(data: dict) -> None:
+    for entry in _all_entries(data):
+        translated = entry.get("translated")
+        if translated and _is_description_entry(entry):
+            entry["translated"] = _postprocess_korean_entry_translation(entry, translated)
 
 
 def _dedupe_free_texts(entries: list[dict]) -> tuple[list[dict], list[list[dict]]]:
@@ -357,6 +455,9 @@ class TranslationEngine:
         """Translate extracted texts JSON with parallel workers."""
         data = json.loads(texts_path.read_text(encoding="utf-8"))
         data = convert_format(data)
+        reused = _seed_existing_translations(data, output_path, self.config.target_lang)
+        if reused:
+            self._log("info", f"Reused {reused:,} existing translations from {output_path}")
 
         # Translate table entries
         for table in data["tables"]:
@@ -368,7 +469,7 @@ class TranslationEngine:
         free_texts = data["free_texts"]
         unique_free_texts, duplicate_free_texts = _dedupe_free_texts(free_texts)
         free_texts_to_process = sorted(
-            unique_free_texts,
+            [entry for entry in unique_free_texts if not entry.get("translated")],
             key=lambda e: e.get("original", "").strip('"'),
         )
         batches = [
@@ -420,6 +521,8 @@ class TranslationEngine:
         needs_llm: list[dict] = []  # entries deferred to batch LLM call
 
         for entry in table["entries"]:
+            if entry.get("translated"):
+                continue
             original = entry["original"].strip('"')
             if _is_placeholder_table_text(original):
                 entry["translated"] = original
@@ -437,7 +540,7 @@ class TranslationEngine:
             # Try glossary lookup
             zh = self.glossary.lookup(original)
             if zh and self.config.target_lang == "ko":
-                entry["translated"] = _fit_korean_table_entry(entry, zh)
+                entry["translated"] = _postprocess_korean_entry_translation(entry, zh)
                 continue
             elif zh:
                 ok, bad = self.charmap.can_encode(zh)
@@ -523,7 +626,7 @@ class TranslationEngine:
                 for entry, codes in grouped[protected]:
                     translated = restore(clean, codes)
                     if self.config.target_lang == "ko":
-                        translated = _fit_korean_table_entry(entry, translated)
+                        translated = _postprocess_korean_entry_translation(entry, translated)
                     entry["translated"] = translated
 
     def _translate_free_batch(self, batch: list[dict]):
@@ -531,6 +634,8 @@ class TranslationEngine:
         # Apply hardcoded overrides
         remaining = []
         for entry in batch:
+            if entry.get("translated"):
+                continue
             entry_id = entry.get("id", "")
             original = entry.get("original", "").strip('"')
             if _is_placeholder_table_text(original):
@@ -541,8 +646,7 @@ class TranslationEngine:
                 continue
             term = self.glossary.lookup(original)
             if term and self.config.target_lang == "ko":
-                translated = _fit_korean_table_entry(entry, term)
-                entry["translated"] = wrap_text(translated, target_lang=self.config.target_lang)
+                entry["translated"] = _postprocess_korean_entry_translation(entry, term)
                 continue
             if (self.config.target_lang == "zh-Hans" and
                 original in _TERM_OVERRIDES):
@@ -595,10 +699,9 @@ class TranslationEngine:
             for entry, codes in grouped[protected]:
                 translated = restore(clean, codes)
                 if self.config.target_lang == "ko":
-                    translated = _fit_korean_table_entry(entry, translated)
-                    if entry.get("category", "") in FIXED_WIDTH_TABLE_CATEGORIES:
-                        entry["translated"] = translated
-                        continue
+                    translated = _postprocess_korean_entry_translation(entry, translated)
+                    entry["translated"] = translated
+                    continue
                 entry["translated"] = wrap_text(translated, target_lang=self.config.target_lang)
 
     def _format_glossary(self, text: str) -> str:
@@ -623,6 +726,7 @@ class TranslationEngine:
         data = json.loads(translations_path.read_text(encoding="utf-8"))
         data = convert_format(data)
         if self.config.target_lang == "ko":
+            _normalize_korean_translations_for_build(data)
             _assert_korean_translation_progress(data)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.unlink(missing_ok=True)

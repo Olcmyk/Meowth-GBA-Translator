@@ -41,6 +41,11 @@ public class TextExtractor
         ExtractLoadpointerTexts(entries, extractedAddresses, entriesByAddress, ref id, loadpointerMap);
         Console.Error.WriteLine($"  loadpointer 文本: {entries.Count - beforeLp} 条");
 
+        Console.Error.WriteLine("Phase 4: loose expansion PCS text scan...");
+        int beforeLoose = entries.Count;
+        ExtractLooseExpansionPcsTexts(entries, extractedAddresses, entriesByAddress, ref id);
+        Console.Error.WriteLine($"  loose custom text: {entries.Count - beforeLoose} entries");
+
         return entries;
     }
 
@@ -92,6 +97,9 @@ public class TextExtractor
 
         foreach (var tableName in _model.Anchors.OrderBy(a => a))
         {
+            var isKnownTextTable = tableNames.ContainsKey(tableName);
+            if (!ShouldScanTable(tableName, isKnownTextTable)) continue;
+
             var (category, knownCount) = tableNames.TryGetValue(tableName, out var known)
                 ? known
                 : (InferBaseCategory(tableName), null);
@@ -246,6 +254,28 @@ public class TextExtractor
         return tableRun.ElementContent.Any(segment =>
             segment.Type == ElementContentType.PCS ||
             segment.Type == ElementContentType.Pointer);
+    }
+
+    private static bool ShouldScanTable(string tableName, bool isKnownTextTable)
+    {
+        if (isKnownTextTable) return true;
+
+        var name = tableName.ToLowerInvariant();
+        string[] unsafeTokens =
+        {
+            ".graphics", "graphics.", ".gfx", "_gfx", ".sprite", "sprites",
+            ".palette", "palettes", ".tileset", "tilesets", ".tilemap",
+            "tilemap", ".animation", "animations", ".sound", "sound.",
+            ".song", "songs", ".cry", "cries", ".music", "tracks",
+        };
+        if (unsafeTokens.Any(name.Contains)) return false;
+
+        string[] textTokens =
+        {
+            ".text", "texts", ".menus.", ".menu.", "message", "messages",
+            "string", "strings", "dialog", "dialogue", "script.text",
+        };
+        return textTokens.Any(name.Contains);
     }
 
     private static bool IsLikelyTextPointerField(string tableName, string fieldName, string category)
@@ -435,6 +465,65 @@ public class TextExtractor
                     added.PointerSources.Add(ptrSource);
             found++;
         }
+    }
+
+    private void ExtractLooseExpansionPcsTexts(
+        List<TextEntry> entries,
+        HashSet<int> extractedAddresses,
+        Dictionary<int, TextEntry> entriesByAddress,
+        ref int id)
+    {
+        const int LooseTextStart = 0x01000000;
+        var start = Math.Min(LooseTextStart, _model.Count);
+
+        for (int address = start; address < _model.Count; address++)
+        {
+            if (extractedAddresses.Contains(address)) continue;
+            if (address > start && _model[address - 1] != 0xFF) continue;
+
+            var textLength = ValidatePcsText(address);
+            if (textLength < 4) continue;
+
+            var text = _model.TextConverter.Convert(_model, address, textLength);
+            if (!LooksLikeLooseCustomText(text)) continue;
+
+            AddOrMergeEntry(
+                entries, extractedAddresses, entriesByAddress, ref id,
+                "custom", "custom_text", address, text, textLength, false, null);
+
+            address += Math.Max(0, textLength - 1);
+        }
+    }
+
+    private static bool LooksLikeLooseCustomText(string text)
+    {
+        if (string.IsNullOrEmpty(text) || text == "\"\"") return false;
+
+        var clean = text.Trim('"').Trim();
+        if (clean.Length < 8 || clean.Length > 512) return false;
+        if (clean.Contains("\\!") || clean.Contains("\\?") || clean.Contains("\\CC")) return false;
+
+        int letters = 0;
+        int textLike = 0;
+        foreach (var ch in clean)
+        {
+            if (char.IsLetter(ch)) letters++;
+            if (
+                char.IsLetterOrDigit(ch) ||
+                char.IsWhiteSpace(ch) ||
+                ch == '\\' ||
+                ch == '[' ||
+                ch == ']' ||
+                ".,!?;:'\"-/()[]".Contains(ch)
+            )
+            {
+                textLike++;
+            }
+        }
+
+        if (letters < 6) return false;
+        if (!clean.Any(char.IsWhiteSpace) && !clean.Any(ch => ".,!?;:'\"-/()[]".Contains(ch))) return false;
+        return (double)textLike / clean.Length >= 0.75;
     }
 
     /// <summary>
