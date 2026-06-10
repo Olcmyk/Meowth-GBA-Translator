@@ -170,8 +170,8 @@ meowth full pokemon.gba \
 - `--target`: Target language code (default: "en")
 - `--output-dir`: Output folder (default: "outputs")
 - `--work-dir`: Temporary working folder (default: "work")
-- `--batch-size`: Texts per translation batch (default: 30)
-- `--workers`: Parallel translation threads (default: 10)
+- `--batch-size`: Texts per translation batch (default: 50)
+- `--workers`: Parallel translation threads (default: 8)
 - `--api-base`: Custom API address (for OpenAI-compatible APIs)
 - `--api-key-env`: Environment variable name for API key
 - `--model`: Custom model name
@@ -269,8 +269,8 @@ provider = "deepseek"              # LLM provider
 model = "deepseek-chat"            # Model name
 source_language = "en"             # Source language code
 target_language = "en"             # Target language code
-batch_size = 30                    # Texts per batch
-max_workers = 10                   # Parallel workers
+batch_size = 50                    # Texts per batch
+max_workers = 8                    # Parallel workers
 
 [translation.api]
 key_env = "DEEPSEEK_API_KEY"       # Environment variable for API key

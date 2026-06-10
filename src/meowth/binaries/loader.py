@@ -146,7 +146,7 @@ def _download_meowth_bridge() -> Path:
         return exe_path
 
     # Download the ZIP file
-    print(f"🔽 First-time setup: Downloading MeowthBridge for {platform_name}...")
+    print(f"First-time setup: Downloading MeowthBridge for {platform_name}...")
     print(f"   Source: {download_url}")
 
     tmp_zip_path = None
@@ -157,7 +157,7 @@ def _download_meowth_bridge() -> Path:
         _download_with_progress_and_retry(download_url, tmp_zip_path)
 
         # Extract ZIP to cache directory
-        print(f"📦 Extracting files...")
+        print("Extracting files...")
         with zipfile.ZipFile(tmp_zip_path, 'r') as zip_ref:
             zip_ref.extractall(cache_dir)
 
@@ -168,7 +168,7 @@ def _download_meowth_bridge() -> Path:
         if platform.system() != "Windows":
             exe_path.chmod(0o755)
 
-        print(f"✅ Downloaded and cached to {cache_dir}")
+        print(f"Downloaded and cached to {cache_dir}")
         print(f"   (Subsequent runs will use the cached version)")
         return exe_path
 
@@ -201,8 +201,8 @@ def _download_with_progress_and_retry(url: str, dest: Path, max_retries: int = 3
             return
         except Exception as e:
             if attempt < max_retries:
-                print(f"   ⚠️  Download failed (attempt {attempt}/{max_retries}): {e}")
-                print(f"   🔄 Retrying in 2 seconds...")
+                print(f"   Download failed (attempt {attempt}/{max_retries}): {e}")
+                print("   Retrying in 2 seconds...")
                 time.sleep(2)
             else:
                 raise

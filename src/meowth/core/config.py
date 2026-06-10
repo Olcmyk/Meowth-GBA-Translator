@@ -1,6 +1,7 @@
 """Unified configuration management for translation pipeline."""
 
 import sys
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -30,6 +31,15 @@ def _get_default_output_dir() -> Path:
     return Path("outputs")
 
 
+def _get_default_korean_font_zip() -> Path | None:
+    env_path = os.environ.get("MEOWTH_KOREAN_FONT_ZIP") or os.environ.get("MEOWTH_KO_FONT_ZIP")
+    return Path(env_path) if env_path else None
+
+
+DEFAULT_BATCH_SIZE = 50
+DEFAULT_MAX_WORKERS = 8
+
+
 @dataclass
 class TranslationConfig:
     """Configuration for the translation pipeline.
@@ -40,7 +50,7 @@ class TranslationConfig:
 
     # Language settings
     source_lang: str = "en"
-    target_lang: str = "zh-Hans"
+    target_lang: str = "ko"
 
     # LLM API settings
     provider: str | None = None
@@ -50,13 +60,14 @@ class TranslationConfig:
     model: str | None = None
 
     # Translation settings
-    batch_size: int = 30
-    max_workers: int = 10
+    batch_size: int = DEFAULT_BATCH_SIZE
+    max_workers: int = DEFAULT_MAX_WORKERS
 
     # File paths
     rom_path: Path | None = None
     output_dir: Path = field(default_factory=_get_default_output_dir)
     work_dir: Path = field(default_factory=_get_default_work_dir)
+    korean_font_zip: Path | None = field(default_factory=_get_default_korean_font_zip)
 
     # Game detection (auto-detected if not specified)
     game: str = "firered"
@@ -85,13 +96,14 @@ class TranslationConfig:
 
         return cls(
             source_lang=translation.get("source_language", "en"),
-            target_lang=translation.get("target_language", "zh-Hans"),
+            target_lang=translation.get("target_language", "ko"),
             provider=translation.get("provider"),
             api_base=api.get("base_url"),
             api_key_env=api.get("key_env"),
             model=translation.get("model"),
-            batch_size=translation.get("batch_size", 30),
-            max_workers=translation.get("max_workers", 10),
+            batch_size=translation.get("batch_size", DEFAULT_BATCH_SIZE),
+            max_workers=translation.get("max_workers", DEFAULT_MAX_WORKERS),
+            korean_font_zip=Path(translation["korean_font_zip"]) if translation.get("korean_font_zip") else _get_default_korean_font_zip(),
         )
 
     @classmethod
@@ -124,16 +136,17 @@ class TranslationConfig:
         # Use current values if set, otherwise fall back to TOML
         return TranslationConfig(
             source_lang=self.source_lang if self.source_lang != "en" else toml_config.source_lang,
-            target_lang=self.target_lang if self.target_lang != "zh-Hans" else toml_config.target_lang,
+            target_lang=self.target_lang if self.target_lang != "ko" else toml_config.target_lang,
             provider=self.provider or toml_config.provider,
             api_base=self.api_base or toml_config.api_base,
             api_key_env=self.api_key_env or toml_config.api_key_env,
             api_key=self.api_key,
             model=self.model or toml_config.model,
-            batch_size=self.batch_size if self.batch_size != 30 else toml_config.batch_size,
-            max_workers=self.max_workers if self.max_workers != 10 else toml_config.max_workers,
+            batch_size=self.batch_size if self.batch_size != DEFAULT_BATCH_SIZE else toml_config.batch_size,
+            max_workers=self.max_workers if self.max_workers != DEFAULT_MAX_WORKERS else toml_config.max_workers,
             rom_path=self.rom_path or toml_config.rom_path,
             output_dir=self.output_dir if self.output_dir != Path("outputs") else toml_config.output_dir,
             work_dir=self.work_dir if self.work_dir != Path("work") else toml_config.work_dir,
+            korean_font_zip=self.korean_font_zip or toml_config.korean_font_zip,
             game=self.game if self.game != "firered" else toml_config.game,
         )

@@ -9,6 +9,7 @@ from pathlib import Path
 
 from .charmap import Charmap
 from .core import TranslationCallbacks, TranslationConfig, TranslationEngine
+from .core.config import DEFAULT_BATCH_SIZE, DEFAULT_MAX_WORKERS
 from .core.engine import (
     TABLE_CATEGORIES,
     convert_format,
@@ -34,7 +35,7 @@ class Pipeline:
         translator: Translator | None = None,
         game: str = "firered",
         source_lang: str = "en",
-        target_lang: str = "zh-Hans",
+        target_lang: str = "ko",
         provider: str | None = None,
         api_base: str | None = None,
         api_key_env: str | None = None,
@@ -81,8 +82,8 @@ class Pipeline:
         self.game = game
 
     def translate_texts(
-        self, texts_path: Path, output_path: Path, batch_size: int = 30,
-        max_workers: int = 10,
+        self, texts_path: Path, output_path: Path, batch_size: int = DEFAULT_BATCH_SIZE,
+        max_workers: int = DEFAULT_MAX_WORKERS,
     ) -> Path:
         """Translate extracted texts JSON with parallel workers."""
         self._engine.config.batch_size = batch_size

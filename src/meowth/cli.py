@@ -1,10 +1,13 @@
 """Meowth CLI - GBA Pokemon translation tool."""
 
 from pathlib import Path
+import json
 
 import click
 
 from .core import TranslationCallbacks, TranslationConfig, TranslationEngine
+from .core.config import DEFAULT_BATCH_SIZE, DEFAULT_MAX_WORKERS
+from .korean_font import default_korean_font_zip, generate_korean_font_assets, render_font_preview
 from .languages import validate_language
 from .pipeline import Pipeline
 from .translator import PROVIDER_PRESETS
@@ -111,11 +114,11 @@ def main():
 @click.argument("rom_path", type=click.Path(exists=True))
 @click.option("-o", "--output", default="work/texts.json", help="Output texts JSON path")
 @click.option("--source", default="en", help="Source language code (default: from config or en)")
-@click.option("--target", default="zh-Hans", help="Target language code (default: from config or zh-Hans)")
+@click.option("--target", default="ko", help="Target language code (default: from config or ko)")
 def extract(rom_path, output, source, target):
     """Extract texts from ROM using MeowthBridge."""
     source = _get_language(source, "en", "source_language")
-    target = _get_language(target, "zh-Hans", "target_language")
+    target = _get_language(target, "ko", "target_language")
     validate_language(source)
     validate_language(target)
     TranslationEngine.extract_texts(Path(rom_path), Path(output))
@@ -125,16 +128,16 @@ def extract(rom_path, output, source, target):
 @main.command()
 @click.argument("texts_json", type=click.Path(exists=True))
 @click.option("-o", "--output", default="work/texts_translated.json")
-@click.option("--batch-size", default=30, help="Texts per LLM batch")
-@click.option("--workers", default=10, help="Parallel translation threads")
+@click.option("--batch-size", default=DEFAULT_BATCH_SIZE, help="Texts per LLM batch")
+@click.option("--workers", default=DEFAULT_MAX_WORKERS, help="Parallel translation threads")
 @click.option("--source", default="en", help="Source language code (default: from config or en)")
-@click.option("--target", default="zh-Hans", help="Target language code (default: from config or zh-Hans)")
+@click.option("--target", default="ko", help="Target language code (default: from config or ko)")
 @add_provider_options
 def translate(texts_json, output, batch_size, workers, source, target,
               provider, api_base, api_key_env, model):
     """Translate extracted texts JSON via LLM API."""
     source = _get_language(source, "en", "source_language")
-    target = _get_language(target, "zh-Hans", "target_language")
+    target = _get_language(target, "ko", "target_language")
     validate_language(source)
     validate_language(target)
     kwargs = _provider_kwargs(provider, api_base, api_key_env, model)
@@ -156,15 +159,21 @@ def translate(texts_json, output, batch_size, workers, source, target,
 @click.option("--translations", required=True, type=click.Path(exists=True))
 @click.option("-o", "--output", required=True)
 @click.option("--source", default="en", help="Source language code (default: from config or en)")
-@click.option("--target", default="zh-Hans", help="Target language code (default: from config or zh-Hans)")
-def build(rom_path, translations, output, source, target):
+@click.option("--target", default="ko", help="Target language code (default: from config or ko)")
+@click.option("--korean-font-zip", default=None, type=click.Path(exists=True),
+              help="Path to Galmuri-v2.40.3.zip for Korean font generation")
+def build(rom_path, translations, output, source, target, korean_font_zip):
     """Build translated ROM from translations."""
     source = _get_language(source, "en", "source_language")
-    target = _get_language(target, "zh-Hans", "target_language")
+    target = _get_language(target, "ko", "target_language")
     validate_language(source)
     validate_language(target)
 
-    config = TranslationConfig(source_lang=source, target_lang=target)
+    config = TranslationConfig(
+        source_lang=source,
+        target_lang=target,
+        korean_font_zip=Path(korean_font_zip) if korean_font_zip else default_korean_font_zip(),
+    )
     engine = TranslationEngine(config, CLICallbacks())
     engine.build_rom(Path(rom_path), Path(translations), Path(output))
 
@@ -174,13 +183,15 @@ def build(rom_path, translations, output, source, target):
 @click.option("-o", "--output-dir", default="outputs")
 @click.option("--work-dir", default="work")
 @click.option("--source", default="en", help="Source language code (default: from config or en)")
-@click.option("--target", default="zh-Hans", help="Target language code (default: from config or zh-Hans)")
+@click.option("--target", default="ko", help="Target language code (default: from config or ko)")
+@click.option("--korean-font-zip", default=None, type=click.Path(exists=True),
+              help="Path to Galmuri-v2.40.3.zip for Korean font generation")
 @add_provider_options
 def full(rom_path, output_dir, work_dir, source, target,
-         provider, api_base, api_key_env, model):
+         korean_font_zip, provider, api_base, api_key_env, model):
     """Run full pipeline: extract -> translate -> build ROM."""
     source = _get_language(source, "en", "source_language")
-    target = _get_language(target, "zh-Hans", "target_language")
+    target = _get_language(target, "ko", "target_language")
     validate_language(source)
     validate_language(target)
     kwargs = _provider_kwargs(provider, api_base, api_key_env, model)
@@ -191,10 +202,44 @@ def full(rom_path, output_dir, work_dir, source, target,
         rom_path=Path(rom_path),
         output_dir=Path(output_dir),
         work_dir=Path(work_dir),
+        korean_font_zip=Path(korean_font_zip) if korean_font_zip else default_korean_font_zip(),
         **kwargs
     )
     engine = TranslationEngine(config, CLICallbacks())
     engine.run_full()
+
+
+@main.command("prepare-ko-font")
+@click.option("--font-zip", required=True, type=click.Path(exists=True),
+              help="Path to Galmuri-v2.40.3.zip")
+@click.option("--translations", default=None, type=click.Path(exists=True),
+              help="Optional translated texts JSON to prioritize glyphs")
+@click.option("--preview", default=None,
+              help="Optional PNG path for a generated glyph preview")
+@click.option("-o", "--output-dir", default="work/korean_font_assets",
+              help="Directory for generated Korean font assets")
+def prepare_ko_font(font_zip, translations, preview, output_dir):
+    """Generate Korean charmap and font binaries from Galmuri."""
+    entries = None
+    if translations:
+        from .core.engine import convert_format
+
+        data = convert_format(json.loads(Path(translations).read_text(encoding="utf-8")))
+        entries = [
+            entry
+            for table in data["tables"]
+            for entry in table["entries"]
+            if "translated" in entry
+        ]
+        entries.extend(entry for entry in data["free_texts"] if "translated" in entry)
+    result = generate_korean_font_assets(Path(font_zip), Path(output_dir), entries=entries)
+    click.echo(
+        f"Generated Korean font assets: {result.glyph_count}/"
+        f"{result.capacity} glyphs -> {result.output_dir}"
+    )
+    if preview:
+        preview_path = render_font_preview(result.output_dir, Path(preview))
+        click.echo(f"Rendered glyph preview: {preview_path}")
 
 
 if __name__ == "__main__":

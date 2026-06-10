@@ -49,6 +49,7 @@ def apply_font_patch(
     output_path: Path,
     armips_path: Path = DEFAULT_ARMIPS,
     game: str = "firered",
+    patch_root: Path = _PATCH_ROOT,
 ) -> Path:
     """Apply Chinese font patch to a ROM.
 
@@ -66,10 +67,14 @@ def apply_font_patch(
     if cfg is None:
         raise ValueError(f"Unsupported game for font patch: {game}")
 
-    font_patch_dir = _PATCH_ROOT / cfg["subdir"]
+    font_patch_dir = Path(patch_root) / cfg["subdir"]
     baserom = font_patch_dir / cfg["baserom"]
     patched = font_patch_dir / cfg["output"]
     asm_file = font_patch_dir / cfg["asm"]
+    if not armips_path.exists():
+        local_armips = font_patch_dir / "tools" / "armips" / ("armips.exe" if _system == "Windows" else "armips")
+        if local_armips.exists():
+            armips_path = local_armips
 
     # Copy ROM as baserom
     shutil.copy2(rom_path, baserom)
@@ -78,18 +83,20 @@ def apply_font_patch(
     if cfg["use_strequ"]:
         cmd = [
             str(armips_path),
-            str(asm_file),
+            cfg["asm"],
             "-strequ", "Origin_Rom", str(baserom),
             "-strequ", "Chinese_Patched_Rom", str(patched),
         ]
     else:
-        cmd = [str(armips_path), str(asm_file)]
+        cmd = [str(armips_path), cfg["asm"]]
 
     result = subprocess.run(
         cmd,
         cwd=str(font_patch_dir),
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
     )
 
     if result.returncode != 0:

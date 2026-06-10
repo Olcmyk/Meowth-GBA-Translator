@@ -15,15 +15,27 @@ if exist resources rmdir /s /q resources
 echo Done.
 echo.
 
-REM Ensure only Windows armips.exe exists
+REM Ensure Windows armips.exe exists
 echo [2/5] Preparing armips...
-if exist tools\armips (
-    del /q tools\armips
-    echo Removed macOS armips binary
-)
 if not exist tools\armips.exe (
-    echo ERROR: tools\armips.exe not found!
-    echo Please build armips first or copy it to tools directory.
+    if exist Pokemon_GBA_Font_Patch\pokeFRLG\tools\armips\armips.exe (
+        copy /y Pokemon_GBA_Font_Patch\pokeFRLG\tools\armips\armips.exe tools\armips.exe >nul
+        echo Copied Windows armips.exe from Pokemon_GBA_Font_Patch.
+    ) else (
+        echo ERROR: tools\armips.exe not found!
+        echo Please build armips first or copy it to tools directory.
+        pause
+        exit /b 1
+    )
+)
+echo Done.
+echo.
+
+REM Build MeowthBridge so the packaged app uses the latest extractor
+echo [2.5/5] Building MeowthBridge...
+dotnet build src\MeowthBridge\MeowthBridge.csproj -c Release
+if errorlevel 1 (
+    echo ERROR: MeowthBridge build failed!
     pause
     exit /b 1
 )
@@ -33,7 +45,8 @@ echo.
 REM Pre-build glossary JSON files
 echo [3/5] Building glossary cache...
 mkdir resources 2>nul
-python -c "from meowth.glossary import Glossary; from meowth.languages import SUPPORTED_LANGUAGES; import json; from pathlib import Path; [Path('resources').joinpath(f'glossary_en_{target}.json').write_text(json.dumps({'source_to_target': Glossary(source_lang='en', target_lang=target).source_to_target}, ensure_ascii=False, indent=2), encoding='utf-8') or print(f'Generated glossary_en_{target}.json') for target in SUPPORTED_LANGUAGES if target != 'en']"
+python -c "from meowth.glossary import Glossary; import json; from pathlib import Path; target='ko'; Path('resources').joinpath(f'glossary_en_{target}.json').write_text(json.dumps({'source_to_target': Glossary(source_lang='en', target_lang=target).source_to_target}, ensure_ascii=False, indent=2), encoding='utf-8'); print(f'Generated glossary_en_{target}.json')"
+python -c "import os, zipfile; from pathlib import Path; p=os.environ.get('MEOWTH_KOREAN_FONT_ZIP') or str(Path.home()/'Downloads'/'Galmuri-v2.40.3.zip'); z=Path(p); out=Path('resources')/'Galmuri-OFL-LICENSE.txt'; (out.write_text(zipfile.ZipFile(z).read('LICENSE.txt').decode('utf-8'), encoding='utf-8') or print(f'Extracted {out}')) if z.exists() else print('Galmuri ZIP not found; skipping Galmuri license extraction')"
 echo Done.
 echo.
 
@@ -44,6 +57,7 @@ pyinstaller ^
   --windowed ^
   --onedir ^
   --add-data "src/meowth;meowth" ^
+  --add-data "src/MeowthBridge/bin/Release/net8.0;meowth/binaries/windows" ^
   --add-data "resources;resources" ^
   --add-data "pokeapi/data/v2/csv;pokeapi/data/v2/csv" ^
   --add-data "Pokemon_GBA_Font_Patch;Pokemon_GBA_Font_Patch" ^
