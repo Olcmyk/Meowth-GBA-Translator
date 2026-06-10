@@ -12,6 +12,7 @@ namespace MeowthBridge;
 public class TextExtractor
 {
     private readonly IDataModel _model;
+    private Dictionary<int, List<int>>? _exactPointerSources;
 
     public TextExtractor(IDataModel model)
     {
@@ -692,12 +693,57 @@ public class TextExtractor
             var text = _model.TextConverter.Convert(_model, address, textLength);
             if (!LooksLikeLooseCustomText(address, text)) continue;
 
+            var pointerSources = FindPointerSourcesTo(address);
             AddOrMergeEntry(
                 entries, extractedAddresses, entriesByAddress, ref id,
-                "custom", "custom_text", address, text, textLength, false, null);
+                "custom", "custom_text", address, text, textLength, pointerSources.Count > 0, pointerSources.FirstOrDefault());
+
+            if (pointerSources.Count > 1 && entriesByAddress.TryGetValue(address, out var added))
+            {
+                foreach (var pointerSource in pointerSources.Skip(1))
+                {
+                    var source = $"0x{pointerSource:X}";
+                    if (!added.PointerSources.Contains(source))
+                        added.PointerSources.Add(source);
+                }
+            }
 
             address += Math.Max(0, textLength - 1);
         }
+    }
+
+    private List<int> FindPointerSourcesTo(int textAddress)
+    {
+        _exactPointerSources ??= BuildExactPointerSourceMap();
+        return _exactPointerSources.TryGetValue(textAddress, out var sources)
+            ? sources
+            : new List<int>();
+    }
+
+    private Dictionary<int, List<int>> BuildExactPointerSourceMap()
+    {
+        var sourcesByTarget = new Dictionary<int, List<int>>();
+        for (int address = 0x0A0000; address <= _model.Count - 4; address += 4)
+        {
+            var value =
+                _model[address] |
+                (_model[address + 1] << 8) |
+                (_model[address + 2] << 16) |
+                (_model[address + 3] << 24);
+            if (value < 0x08000000) continue;
+
+            var target = value - 0x08000000;
+            if (target < 0 || target >= _model.Count) continue;
+
+            if (!sourcesByTarget.TryGetValue(target, out var sources))
+            {
+                sources = new List<int>();
+                sourcesByTarget[target] = sources;
+            }
+            sources.Add(address);
+        }
+
+        return sourcesByTarget;
     }
 
     private static bool LooksLikeLooseCustomText(int address, string text)
