@@ -43,7 +43,7 @@ FIXED_WIDTH_TABLE_CATEGORIES = {
 
 DESCRIPTION_LINE_WIDTH = 28
 DESCRIPTION_WRAP_SETTINGS = {
-    "move_descriptions": (20, 4),
+    "move_descriptions": (16, 4),
     "ability_descriptions": (20, 2),
     "item_descriptions": (20, 2),
     "berry_descriptions": (20, 2),
@@ -103,6 +103,97 @@ _TERM_OVERRIDES: dict[str, str] = {
     "POKéDEX": "图鉴",
     "POKéMON": "宝可梦",
     "POKéNAV": "导航仪",
+}
+
+
+_KOREAN_OVERRIDES: dict[str, str] = {
+    "Quick HMs": "빠른 비전",
+    "Skip Cutscenes": "이벤트 생략",
+    "Save Prompts": "저장 알림",
+    "L-Button Mode": "L 버튼",
+    "R-Button Mode": "R 버튼",
+    "Sound Effects": "효과음",
+    "Background Music": "배경음",
+    "Bike&Surf Music": "자전거/파도타기",
+    "Overworld Theme": "필드 음악",
+    "Wild Theme": "야생 음악",
+    "Trainer Theme": "트레이너 음악",
+    "Battle Effects": "전투 연출",
+    "Battle Difficulty": "전투 난이도",
+    "Exp. Gain": "경험치",
+    "Item Restrictions": "도구 제한",
+    "Fast Messages": "빠른 메시지",
+    "Type Icons": "타입 아이콘",
+    "General Options": "일반 설정",
+    "Audio Options": "사운드 설정",
+    "Battle Options": "배틀 설정",
+    "Auto-Run": "자동 달리기",
+    "Reg Item 2": "등록 도구 2",
+    "Dexnav Scan": "도감 탐색",
+    "Mining Scan": "채굴 탐색",
+    "View Party": "파티 보기",
+    "View Items": "도구 보기",
+    "Mission Log": "미션 기록",
+    "Debug Menu": "디버그",
+    "Puzzle Difficulty": "퍼즐 난이도",
+    "Auto Item Sort": "도구 자동정렬",
+    "By Amount": "수량순",
+    "Semi-Shift": "반 교체",
+    "Exp. Share": "경험치 공유",
+    "Capped Exp. Share": "상한 경험치 공유",
+    "4 Items Only": "도구 4개",
+    "No Items": "도구 금지",
+    "Enemy Trainer Only": "상대만",
+    "Quick Run": "빠른 도망",
+    "Team Preview": "상대 파티",
+    "Frontier Only": "프런티어만",
+    "Last Used Ball": "최근 볼",
+    "After 1 Ball": "1회 후",
+    "Always Best Ball": "최적 볼",
+    "Nickname Offer": "별명 묻기",
+    "Take Wild Item": "야생 도구 회수",
+    "Audio Quality": "음질",
+    "Low (Faster)": "낮음",
+    "Medium (Default)": "보통",
+    "High (Slower)": "높음",
+    "Skip certain story cutscenes.": "일부 이벤트를 건너뜁니다.",
+    "Receive prompts to save often.": "저장 알림을 자주 표시합니다.",
+    "HMs can be used quicker in the field.": "필드에서 비전을 빠르게 씁니다.",
+    "The difficulty of overworld puzzles.": "필드 퍼즐 난이도입니다.",
+    "Auto sorts the Cube's Items sector.": "큐브 도구칸을 자동 정렬합니다.",
+    "The frame style of certain text boxes.": "일부 창 테두리 모양입니다.",
+    "The quality of all game audio.": "게임 전체 음질입니다.",
+    "Which audio speakers play.": "사용할 스피커를 정합니다.",
+    "Speakers may play differing audio.": "좌우 스피커를 다르게 씁니다.",
+    "Both speakers play the same audio.": "양쪽 스피커를 같게 씁니다.",
+    "Play sound effects and cries.": "효과음과 울음소리를 재생합니다.",
+    "Play background music.": "배경 음악을 재생합니다.",
+    "Play themes when biking and Surfing.": "자전거/파도타기 음악을 재생합니다.",
+    "Override music for the overworld.": "필드 음악을 바꿉니다.",
+    "Override music for wild battles.": "야생 배틀 음악을 바꿉니다.",
+    "Override music for Trainer battles.": "트레이너 배틀 음악을 바꿉니다.",
+    "View battle animations.": "배틀 연출을 표시합니다.",
+    "Get free switch after a KO.": "기절 후 교체 기회를 줍니다.",
+    "No free switch after a KO.": "기절 후 교체 기회가 없습니다.",
+    "Get nameless free switch after a KO.": "기절 후 교체 안내를 줄입니다.",
+    "The battle difficulty for all battles.": "모든 배틀의 난이도입니다.",
+    "Button combination for fleeing quickly.": "빠른 도망 버튼 조합입니다.",
+    "Exp. distribution after a KO.": "기절 후 경험치 배분입니다.",
+    "Only the Pokémon sent out gain Exp.": "출전한 포켓몬만 경험치를 얻습니다.",
+    "All Pokémon in the party gain Exp.": "파티 전원이 경험치를 얻습니다.",
+    "Exp. Share with hard level caps.": "레벨 상한에 맞춰 경험치를 나눕니다.",
+    "Rules for using items in Trainer battles.": "트레이너전 도구 사용 규칙입니다.",
+    "Show prompt to view enemy team.": "상대 파티 확인을 묻습니다.",
+    "Show prompt to use last Poke Ball.": "최근 사용한 볼을 묻습니다.",
+    "Battle messages play with less delay.": "배틀 메시지를 빠르게 표시합니다.",
+    "Pokémon types are shown when attacking.": "공격 시 타입 아이콘을 표시합니다.",
+    "Offer to nickname a caught Pokémon.": "포획 후 별명을 물어봅니다.",
+    "Put a caught Pokémon's item in the Cube.": "포획한 포켓몬의 도구를 큐브에 넣습니다.",
+    "Save the selected settings.": "선택한 설정을 저장합니다.",
+    "Save\r\nDiscard\\n\r\nCancel": "저장\n버리기\n취소",
+    "[green]Save[black] or [red]discard[black] the selected settings?": "[green]저장[black] 또는 [red]버리기[black] 할까요?",
+    "Oh!\r\nSilly me!\r\n\r\nHow can I expect you to find [green]Icicle\r\nCave[blue] if you don't know the way?\r\n\r\nThis [green]Town Map[blue] should aid you\r\nimmensely!": "아차!\n깜빡했구나!\n\n[green]얼음 동굴[blue]을 찾아가려면\n길을 알아야겠지?\n\n이 [green]타운 맵[blue]이\n큰 도움이 될 거야!",
+    "Now, let's take a look at the\r\nTown Map, shall we?": "그럼 타운 맵을\n한번 확인해 볼까?",
 }
 
 
@@ -206,6 +297,17 @@ def _description_wrap_settings(entry: dict) -> tuple[int, int]:
     return DESCRIPTION_WRAP_SETTINGS.get(category, (DESCRIPTION_LINE_WIDTH, 2))
 
 
+def _korean_override(original: str) -> str | None:
+    return _KOREAN_OVERRIDES.get(original.strip('"'))
+
+
+def _format_korean_override(entry: dict, override: str) -> str:
+    original = entry.get("original", "").strip('"')
+    if original == "Save\r\nDiscard\\n\r\nCancel":
+        return override
+    return _postprocess_korean_entry_translation(entry, override)
+
+
 def _postprocess_korean_entry_translation(entry: dict, text: str) -> str:
     text = _fit_korean_table_entry(entry, text)
     category = entry.get("category", "")
@@ -213,12 +315,15 @@ def _postprocess_korean_entry_translation(entry: dict, text: str) -> str:
         return text
     if _is_description_entry(entry):
         line_width, lines_per_box = _description_wrap_settings(entry)
-        return wrap_text(
+        wrapped = wrap_text(
             text,
             line_width=line_width,
             lines_per_box=lines_per_box,
             target_lang="ko",
         )
+        if category == "move_descriptions":
+            return wrapped.replace("\\p", "\n").replace("\\n", "\n")
+        return wrapped
     return wrap_text(text, target_lang="ko")
 
 
@@ -296,6 +401,10 @@ def _seed_existing_translations(data: dict, existing_path: Path, target_lang: st
 
 def _normalize_korean_translations_for_build(data: dict) -> None:
     for entry in _all_entries(data):
+        override = _korean_override(entry.get("original", ""))
+        if override is not None:
+            entry["translated"] = _format_korean_override(entry, override)
+            continue
         translated = entry.get("translated")
         if translated and _is_description_entry(entry):
             entry["translated"] = _postprocess_korean_entry_translation(entry, translated)
@@ -545,6 +654,11 @@ class TranslationEngine:
             if _is_placeholder_table_text(original):
                 entry["translated"] = original
                 continue
+            if self.config.target_lang == "ko":
+                override = _korean_override(original)
+                if override is not None:
+                    entry["translated"] = _format_korean_override(entry, override)
+                    continue
             # Check term overrides (all games, Chinese only)
             if self.config.target_lang == "zh-Hans" and original in _TERM_OVERRIDES:
                 entry["translated"] = _TERM_OVERRIDES[original]
@@ -662,6 +776,11 @@ class TranslationEngine:
             if entry.get("category") == "scripts" and not is_real_text(original):
                 entry["translated"] = original
                 continue
+            if self.config.target_lang == "ko":
+                override = _korean_override(original)
+                if override is not None:
+                    entry["translated"] = _format_korean_override(entry, override)
+                    continue
             term = self.glossary.lookup(original)
             if term and self.config.target_lang == "ko":
                 entry["translated"] = _postprocess_korean_entry_translation(entry, term)

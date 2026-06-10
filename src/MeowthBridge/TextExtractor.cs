@@ -696,7 +696,8 @@ public class TextExtractor
             var pointerSources = FindPointerSourcesTo(address);
             AddOrMergeEntry(
                 entries, extractedAddresses, entriesByAddress, ref id,
-                "custom", "custom_text", address, text, textLength, pointerSources.Count > 0, pointerSources.FirstOrDefault());
+                "custom", "custom_text", address, text, textLength, pointerSources.Count > 0,
+                pointerSources.Count > 0 ? pointerSources[0] : null);
 
             if (pointerSources.Count > 1 && entriesByAddress.TryGetValue(address, out var added))
             {
