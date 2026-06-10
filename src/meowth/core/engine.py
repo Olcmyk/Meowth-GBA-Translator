@@ -43,11 +43,11 @@ FIXED_WIDTH_TABLE_CATEGORIES = {
 
 DESCRIPTION_LINE_WIDTH = 28
 DESCRIPTION_WRAP_SETTINGS = {
-    "move_descriptions": (24, 4),
-    "ability_descriptions": (24, 2),
-    "item_descriptions": (22, 2),
-    "berry_descriptions": (22, 2),
-    "decoration_descriptions": (22, 2),
+    "move_descriptions": (20, 4),
+    "ability_descriptions": (20, 2),
+    "item_descriptions": (20, 2),
+    "berry_descriptions": (20, 2),
+    "decoration_descriptions": (20, 2),
     "pokedex_descriptions": (26, 4),
 }
 TRANSLATION_REUSE_SCHEMA = 2

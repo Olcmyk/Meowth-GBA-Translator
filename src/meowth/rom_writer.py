@@ -170,6 +170,21 @@ class RomWriter:
         )
         return any(token in haystack for token in unsafe_tokens)
 
+    def _is_unsafe_in_place_custom_text(self, entry: dict, address: int) -> bool:
+        """Avoid in-place writes to loose scanned expansion text.
+
+        Loose custom_text entries do not have a trustworthy pointer/table owner.
+        On ROM hacks, graphic and map chunks can still decode as plausible PCS
+        strings. Writing those entries in-place is the remaining path that can
+        corrupt isolated map tiles, so only high script-like custom text may be
+        patched without explicit pointer sources.
+        """
+        if entry.get("category") != "custom_text":
+            return False
+        if entry.get("pointer_addresses") or entry.get("pointer_sources"):
+            return False
+        return address < 0x01E00000
+
     def _reclaim_relocated_text_slots(self, rom: bytes, entries: list[dict]) -> int:
         """Reuse old pointer-based text slots that will be redirected.
 
@@ -363,6 +378,9 @@ class RomWriter:
 
         # Defense-in-depth: never write in-place to the ARM code section
         if address < self.MIN_POINTER_SOURCE and not pointer_sources:
+            stats["skipped_same"] += 1
+            return
+        if self._is_unsafe_in_place_custom_text(entry, address):
             stats["skipped_same"] += 1
             return
 
@@ -695,6 +713,10 @@ class RomWriter:
 
         # Defense-in-depth: never write in-place to the ARM code section
         if address < self.MIN_POINTER_SOURCE and not pointer_sources:
+            stats["skipped"] += 1
+            stats["skipped_unsafe"] += 1
+            return
+        if self._is_unsafe_in_place_custom_text(entry, address):
             stats["skipped"] += 1
             stats["skipped_unsafe"] += 1
             return

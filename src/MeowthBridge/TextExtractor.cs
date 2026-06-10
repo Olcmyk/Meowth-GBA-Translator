@@ -30,6 +30,7 @@ public class TextExtractor
         ExtractTableTexts(entries, extractedAddresses, entriesByAddress, ref id);
         ExtractSequentialAbilityTexts(entries, extractedAddresses, entriesByAddress, ref id);
         ExtractLooseAbilityDescriptionTexts(entries, extractedAddresses, entriesByAddress, ref id);
+        ExtractHackAbilityDescriptionTexts(entries, extractedAddresses, entriesByAddress, ref id);
         Console.Error.WriteLine($"  表格文本: {entries.Count} 条");
 
         // Phase 2: 扫描 loadpointer 指令，构建安全的指针源映射
@@ -372,6 +373,44 @@ public class TextExtractor
             .DefaultIfEmpty(_model.Count)
             .Min();
         var end = Math.Min(Math.Min(_model.Count, start + MaxAbilityDescriptionRegion), nextAbilityNameAddress);
+
+        for (int address = start; address < end; address++)
+        {
+            if (extractedAddresses.Contains(address)) continue;
+            if (address > start && _model[address - 1] != 0xFF) continue;
+
+            var textLength = ValidateSequentialPcsText(address);
+            if (textLength < 2) continue;
+
+            var text = _model.TextConverter.Convert(_model, address, textLength);
+            if (!LooksLikeAbilityDescription(text)) continue;
+
+            AddOrMergeEntry(
+                entries, extractedAddresses, entriesByAddress, ref id,
+                "ability_description", "ability_descriptions", address, text, textLength, false, null,
+                "data.abilities.descriptions", null, "description");
+
+            address += Math.Max(0, textLength - 1);
+        }
+    }
+
+    private void ExtractHackAbilityDescriptionTexts(
+        List<TextEntry> entries,
+        HashSet<int> extractedAddresses,
+        Dictionary<int, TextEntry> entriesByAddress,
+        ref int id)
+    {
+        var firstAbilityNameAddress = entries
+            .Where(e => e.Category == "ability_names")
+            .Select(e => int.TryParse(e.Address.AsSpan(2), System.Globalization.NumberStyles.HexNumber, null, out var address) ? address : -1)
+            .Where(address => address > 0x0800000)
+            .DefaultIfEmpty(-1)
+            .Min();
+        if (firstAbilityNameAddress < 0) return;
+
+        const int MaxPrecedingDescriptionBlock = 0x1800;
+        var start = Math.Max(0, firstAbilityNameAddress - MaxPrecedingDescriptionBlock);
+        var end = Math.Min(_model.Count, firstAbilityNameAddress);
 
         for (int address = start; address < end; address++)
         {
