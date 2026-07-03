@@ -1,5 +1,6 @@
 """Mock script to translate English terms to Somali using OpenAI."""
 
+
 import json
 import os
 from pathlib import Path

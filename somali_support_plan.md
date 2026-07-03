@@ -1,5 +1,6 @@
 # Adding Somali Translation Support to Meowth GBA Translator
 
+
 To add support for the Somali language (`so`) to the Meowth GBA Translator project, changes will need to be made across several files to properly register the language, configure GUI forms, update localization mappings, and potentially handle character limitations.
 
 Here is an analysis of the repository and the files that need to be updated.
