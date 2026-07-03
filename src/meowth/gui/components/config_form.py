@@ -16,6 +16,7 @@ LANGUAGES = {
     "French": "fr",
     "German": "de",
     "Italian": "it",
+    "Somali": "so",
 }
 
 LANG_NAMES = list(LANGUAGES.keys())

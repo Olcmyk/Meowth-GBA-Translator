@@ -1,5 +1,6 @@
 """Language configuration — single source of truth for supported languages."""
 
+
 SUPPORTED_LANGUAGES: dict[str, dict] = {
     "en":      {"name": "English",              "name_zh": "英文",     "pokeapi_id": 9},
     "es":      {"name": "Spanish",              "name_zh": "西班牙文", "pokeapi_id": 7},
@@ -7,10 +8,11 @@ SUPPORTED_LANGUAGES: dict[str, dict] = {
     "de":      {"name": "German",               "name_zh": "德文",     "pokeapi_id": 6},
     "it":      {"name": "Italian",              "name_zh": "意大利文", "pokeapi_id": 8},
     "zh-Hans": {"name": "Simplified Chinese",   "name_zh": "简体中文", "pokeapi_id": 12},
+    "so":      {"name": "Somali",               "name_zh": "索马里文", "pokeapi_id": None},
 }
 
 _CJK_LANGUAGES = {"zh-Hans", "zh-Hant", "ja", "ko"}
-_LATIN_LANGUAGES = {"en", "es", "fr", "de", "it"}
+_LATIN_LANGUAGES = {"en", "es", "fr", "de", "it", "so"}
 
 # Characters that exist in some Latin languages but not in GBA PCS charset
 LATIN_CHAR_REPLACEMENTS: dict[str, dict[str, str]] = {}
