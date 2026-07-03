@@ -23,7 +23,7 @@ Un traduttore intelligente di ROM GBA Pokémon alimentato da LLM con interfacce 
 - **Supporto Interfaccia Doppia**: GUI intuitiva e CLI potente
 - **Traduzione IA**: Supporto per 11+ provider LLM (OpenAI, DeepSeek, Google Gemini, ecc.)
 - **Multipiattaforma**: Supporto per macOS, Windows, Linux
-- **Supporto Sei Lingue**: Inglese, spagnolo, francese, tedesco, italiano, cinese
+- **Supporto Sette Lingue**: Inglese, spagnolo, francese, tedesco, italiano, cinese, somalo
 - **Flusso di Lavoro Efficiente**: Estrai → Traduci → Costruisci in un comando
 - **Completamente Gratuito**: 100% open source, licenza MIT
 - **Libreria Font Intelligente**: Iniezione automatica di font per traduzioni in cinese
@@ -242,6 +242,7 @@ Lingue attualmente supportate:
 - **Tedesco** - `de`
 - **Italiano** - `it`
 - **Cinese** - `zh-Hans`
+- **Somalo** - `so`
 
 **Importante**: La traduzione in cinese supporta solo ROM con patch binarie, non progetti di decompilazione. Altre combinazioni di lingue non hanno questa restrizione.
 

@@ -79,6 +79,8 @@ outputs/*
 # Resources（由构建脚本从 HMA 生成，不入库）
 # ============================================================
 resources/
+!resources/glossary_*.json
+!resources/pokeapi_en_terms.json
 resources_temp/
 hma_workdir/
 
